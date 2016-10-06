@@ -75,6 +75,10 @@ static_assert(HAS_REMOTE_API == 0 ? AUTO_DOWNLOAD == 0 : true,
 
 #include "date.h"
 
+#if defined(_MSC_VER) && (_MSC_VER < 1900)
+#include "tz_private.h"
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -197,7 +201,7 @@ ambiguous_local_time::make_msg(local_time<Duration> tp,
     return os.str();
 }
 
-class Rule;
+namespace detail { class Rule; }
 
 struct sys_info
 {
@@ -299,13 +303,16 @@ operator!=(const zoned_time<Duration1>& x, const zoned_time<Duration2>& y)
     return !(x == y);
 }
 
+#if !defined(_MSC_VER) || (_MSC_VER >= 1900)
+namespace detail { struct zonelet; }
+#endif
+
 class time_zone
 {
 private:
-    struct zonelet;
 
     std::string          name_;
-    std::vector<zonelet> zonelets_;
+    std::vector<detail::zonelet> zonelets_;
 #if LAZY_INIT
     std::unique_ptr<std::once_flag> adjusted_;
 #endif
@@ -343,7 +350,7 @@ public:
     friend std::ostream& operator<<(std::ostream& os, const time_zone& z);
 
     void add(const std::string& s);
-    void adjust_infos(const std::vector<Rule>& rules);
+    void adjust_infos(const std::vector<detail::Rule>& rules);
 
 private:
     sys_info   get_info_impl(sys_seconds tp) const;
@@ -673,11 +680,11 @@ struct timezone_info
 
 struct TZ_DB
 {
-    std::string            version;
-    std::vector<time_zone> zones;
-    std::vector<link>      links;
-    std::vector<leap>      leaps;
-    std::vector<Rule>      rules;
+    std::string               version;
+    std::vector<time_zone>    zones;
+    std::vector<link>         links;
+    std::vector<leap>         leaps;
+    std::vector<detail::Rule> rules;
 #ifdef TIMEZONE_MAPPING
     // TODO! These need some protection.
     std::vector<detail::timezone_mapping> mappings;
@@ -1124,7 +1131,7 @@ public:
     using time_point                = std::chrono::time_point<tai_clock>;
     static const bool is_steady     = true;
 
-    static time_point now() noexcept;
+    static time_point now() NOEXCEPT;
 
     template <class Duration>
         static
@@ -1150,7 +1157,7 @@ tai_clock::utc_to_tai(utc_time<Duration> t)
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return tai_time<duration>{t.time_since_epoch()} + 
-            (sys_days{1970_y/jan/1} - sys_days{1958_y/jan/1} + seconds{10});
+            (sys_days{year{1970}/jan/1} - sys_days{year{1958}/jan/1} + seconds{10});
 }
 
 template <class Duration>
@@ -1160,7 +1167,7 @@ tai_clock::tai_to_utc(tai_time<Duration> t)
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return utc_time<duration>{t.time_since_epoch()} - 
-            (sys_days{1970_y/jan/1} - sys_days{1958_y/jan/1} + seconds{10});
+            (sys_days{year{1970}/jan/1} - sys_days{year{1958}/jan/1} + seconds{10});
 }
 
 template <class Duration>
@@ -1181,7 +1188,7 @@ to_tai_time(utc_time<Duration> t)
 
 inline
 tai_clock::time_point
-tai_clock::now() noexcept
+tai_clock::now() NOEXCEPT
 {
     using namespace std::chrono;
     return to_tai_time(utc_clock::now());
@@ -1194,7 +1201,7 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const tai_time<Duration>& t)
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     auto tp = sys_time<duration>{t.time_since_epoch()} -
-                (sys_days{1970_y/jan/1} - sys_days{1958_y/jan/1});
+                (sys_days{year{1970}/jan/1} - sys_days{year{1958}/jan/1});
     return os << tp;
 }
 
@@ -1209,7 +1216,7 @@ public:
     using time_point                = std::chrono::time_point<gps_clock>;
     static const bool is_steady     = true;
 
-    static time_point now() noexcept;
+    static time_point now() NOEXCEPT;
 
     template <class Duration>
         static
@@ -1235,7 +1242,7 @@ gps_clock::utc_to_gps(utc_time<Duration> t)
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return gps_time<duration>{t.time_since_epoch()} -
-            (sys_days{1980_y/jan/sun[1]} - sys_days{1970_y/jan/1} + seconds{9});
+            (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1970}/jan/1} + seconds{9});
 }
 
 template <class Duration>
@@ -1245,7 +1252,7 @@ gps_clock::gps_to_utc(gps_time<Duration> t)
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return utc_time<duration>{t.time_since_epoch()} +
-            (sys_days{1980_y/jan/sun[1]} - sys_days{1970_y/jan/1} + seconds{9});
+            (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1970}/jan/1} + seconds{9});
 }
 
 template <class Duration>
@@ -1266,7 +1273,7 @@ to_gps_time(utc_time<Duration> t)
 
 inline
 gps_clock::time_point
-gps_clock::now() noexcept
+gps_clock::now() NOEXCEPT
 {
     using namespace std::chrono;
     return to_gps_time(utc_clock::now());
@@ -1279,7 +1286,7 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const gps_time<Duration>& t)
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     auto tp = sys_time<duration>{t.time_since_epoch()} +
-                (sys_days{1980_y/jan/sun[1]} - sys_days{1970_y/jan/1});
+                (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1970}/jan/1});
     return os << tp;
 }
 
