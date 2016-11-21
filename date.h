@@ -4019,7 +4019,7 @@ format(const std::locale& loc, std::basic_string<CharT, Traits> fmt,
                     if (!modified)
                         s.erase(s.find(':'), 1);
                     fmt.replace(i - 1 - modified, 2 + modified, s);
-                    i += s.size() - 1;
+                    i += 3;
                 }
             }
             command = false;
@@ -4347,8 +4347,8 @@ parse(std::basic_istream<CharT, Traits>& is,
                 tp = floor<Duration>(local_days(year{tm.tm_year + 1900}/
                                                (tm.tm_mon+1)/
                                                (tm.tm_mday)) +
-                                     hours{tm.tm_hour} +  minutes{tm.tm_min} +
-                                     seconds{tm.tm_sec} + subseconds);
+                                     subseconds + seconds{tm.tm_sec} +
+                                     minutes{tm.tm_min} + hours{tm.tm_hour});
                 if (abbrev != nullptr)
                     *abbrev = std::move(temp_abbrev);
                 if (offset != nullptr)
