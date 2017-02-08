@@ -3,7 +3,8 @@
 // Copyright (c) 2015, 2016 Howard Hinnant
 // Copyright (c) 2015 Ville Voutilainen
 // Copyright (c) 2016 Alexander Kormanovsky
-// Copyright (c) 2016 Jiangang Zhuang
+// Copyright (c) 2016, 2017 Jiangang Zhuang
+// Copyright (c) 2017 Nicolas Veloz Savino
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -110,6 +111,8 @@
 #else   // !WIN32
 #  include <unistd.h>
 #  include <wordexp.h>
+#  include <limits.h>
+#  include <string.h>
 #  if !USE_SHELL_API
 #    include <sys/stat.h>
 #    include <sys/fcntl.h>
@@ -187,22 +190,25 @@ get_download_folder()
 
 #else // !_WIN32
 
+#  ifndef INSTALL
 
 static
 std::string
 expand_path(std::string path)
 {
-#if TARGET_OS_IPHONE
+#    if TARGET_OS_IPHONE
     return date::iOSUtils::get_tzdata_path();
-#else
+#    else
     ::wordexp_t w{};
     ::wordexp(path.c_str(), &w, 0);
     assert(w.we_wordc == 1);
     path = w.we_wordv[0];
     ::wordfree(&w);
     return path;
-#endif
+#    endif
 }
+
+#  endif  // !INSTALL
 
 #endif  // !_WIN32
 
@@ -215,10 +221,10 @@ namespace date
 using namespace detail;
 
 static
-const std::string&
-get_install()
+std::string&
+access_install()
 {
-    static const std::string install 
+    static std::string install 
 #ifndef INSTALL
 
 #  ifdef _WIN32
@@ -237,6 +243,20 @@ get_install()
 #endif  // INSTALL
 
     return install;
+}
+
+void
+set_install(const std::string& s)
+{
+    access_install() = s;
+}
+
+static
+const std::string&
+get_install()
+{
+    static const std::string& ref = access_install();
+    return ref;
 }
 
 static
@@ -271,6 +291,21 @@ static_assert(min_year <= max_year, "Configuration error");
 
 namespace // Put types in an anonymous name space.
 {
+
+const std::string&
+get_windows_zones_install()
+{
+    static const std::string install
+#ifndef WINDOWSZONES_INSTALL
+    = get_install();
+#else
+#  define STRINGIZEIMP(x) #x
+#  define STRINGIZE(x) STRINGIZEIMP(x)
+    = STRINGIZE(WINDOWSZONES_INSTALL);
+#endif
+    std::cout << install << std::endl;
+    return install;
+}
 
 // A simple type to manage RAII for key handles and to
 // implement the trivial registry interface we need.
@@ -2711,7 +2746,7 @@ remote_install(const std::string& version)
                 success = true;
 #ifdef TIMEZONE_MAPPING
             auto mapping_file_source = get_download_mapping_file(version);
-            auto mapping_file_dest = install;
+            auto mapping_file_dest = get_windows_zones_install();
             mapping_file_dest += folder_delimiter;
             mapping_file_dest += "windowsZones.xml";
             if (!move_file(mapping_file_source, mapping_file_dest))
@@ -2873,7 +2908,7 @@ init_tzdb()
     db.leaps.shrink_to_fit();
 
 #ifdef TIMEZONE_MAPPING
-    std::string mapping_file = path + "windowsZones.xml";
+    std::string mapping_file = get_windows_zones_install() + folder_delimiter + "windowsZones.xml";
     db.mappings = load_timezone_mappings_from_xml_file(mapping_file);
     sort_zone_mappings(db.mappings);
     get_windows_timezone_info(db.native_zones);
@@ -3048,6 +3083,12 @@ current_zone()
 
 #else // !WIN32
 
+#ifdef __GNUC__
+// GCC complains about unused return from strerror_r
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-result"
+#endif
+
 const time_zone*
 current_zone()
 {
@@ -3068,11 +3109,19 @@ current_zone()
     CONSTDATA auto timezone = "/etc/localtime";
     if (lstat(timezone, &sb) == 0 && S_ISLNK(sb.st_mode) && sb.st_size > 0)
     {
-        std::string result(sb.st_size, '\0');
-        auto sz = readlink(timezone, &result.front(), result.size());
-        if (sz == -1)
-            throw std::runtime_error("readlink failure");
-        result.resize(sz);
+        std::string result;
+        char rp[PATH_MAX];
+        if (realpath(timezone, rp))
+            result = std::string(rp);
+        else
+        {
+            std::ostringstream os;
+            char message[128];
+            (void)strerror_r(errno, message, 128);
+            os << "realpath failure: errno = " << errno << "; " << message;
+            throw std::runtime_error(os.str());
+        }
+
         const char zonepath[] = "/usr/share/zoneinfo/";
         const std::size_t zonepath_len = sizeof(zonepath)/sizeof(zonepath[0])-1;
         const std::size_t pos = result.find(zonepath);
@@ -3116,6 +3165,10 @@ current_zone()
     }
     throw std::runtime_error("Could not get current timezone");
 }
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 
 #endif // !WIN32
 
