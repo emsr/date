@@ -1,13 +1,5 @@
 [![Join the chat at https://gitter.im/HowardHinnant/date](https://badges.gitter.im/HowardHinnant/date.svg)](https://gitter.im/HowardHinnant/date?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 <hr/>
-IMPORTANT UPDATE:
-
-Recently IANA changed how they reported the database version.  If you have `AUTO_DOWNLOAD` enabled in the tz library, you must update to include this commit:
-
-https://github.com/HowardHinnant/date/commit/19c83e47ed411a45e0b5a45d772c47c6ee23ac3f
-
-Without this update your tz lib will download a new copy of the database everytime you start your program.
-<hr/>
 _**[Try it out on wandbox!](http://melpon.org/wandbox/permlink/PodYB3AwdYNFKbMv)**_
 
 This is actually several separate C++11/C++14 libraries:
@@ -34,4 +26,4 @@ This is actually several separate C++11/C++14 libraries:
 
 There has been a recent change in the library design.  If you are trying to migrate from the previous design, rename `day_point` to `sys_days` everywhere, and that ought to bring the number of errors down to a small roar.
 
-`"date.h"` and `"tz.h"` are now being proposed for standardization: http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2016/p0355r1.html
+`"date.h"` and `"tz.h"` are now being proposed for standardization: http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2017/p0355r2.html

@@ -303,7 +303,6 @@ get_windows_zones_install()
 #  define STRINGIZE(x) STRINGIZEIMP(x)
     = STRINGIZE(WINDOWSZONES_INSTALL);
 #endif
-    std::cout << install << std::endl;
     return install;
 }
 
@@ -997,7 +996,7 @@ detail::MonthDayTime::canonicalize(date::year y)
         return;
     case month_last_dow:
         {
-            auto const ymd = year_month_day(sys_days{y/u.month_weekday_last_});
+            auto const ymd = year_month_day(sys_days(y/u.month_weekday_last_));
             u.month_day_ = ymd.month()/ymd.day();
             type_ = month_day;
             return;

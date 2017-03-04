@@ -1037,13 +1037,21 @@ make_zoned(const std::string& name, const sys_time<Duration>& st)
 }
 
 template <class CharT, class Traits, class Duration>
+void
+to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
+          const zoned_time<Duration>& tp)
+{
+    auto const info = tp.get_info();
+    to_stream(os, fmt, tp.get_local_time(), &info.abbrev, &info.offset);
+}
+
+template <class CharT, class Traits, class Duration>
 inline
 std::basic_ostream<CharT, Traits>&
 operator<<(std::basic_ostream<CharT, Traits>& os, const zoned_time<Duration>& t)
 {
-    auto i = t.zone_->get_info(t.tp_);
-    auto lt = t.tp_ + i.offset;
-    return os << lt << ' ' << i.abbrev;
+    to_stream(os, "%F %T %Z", t);
+    return os;
 }
 
 class utc_clock
@@ -1108,13 +1116,20 @@ utc_clock::now()
 }
 
 template <class CharT, class Traits, class Duration>
-std::basic_ostream<CharT, Traits>&
-operator<<(std::basic_ostream<CharT, Traits>& os, const utc_time<Duration>& t)
+void
+to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
+          const utc_time<Duration>& t)
 {
+    using namespace std;
     using namespace std::chrono;
-    using duration = typename std::common_type<Duration, seconds>::type;
+    using CT = typename common_type<Duration, seconds>::type;
+    const string abbrev("UTC");
+    CONSTDATA seconds offset{0};
     auto const& leaps = get_tzdb().leaps;
-    auto tp = sys_time<duration>{t.time_since_epoch()};
+    auto tp = sys_time<CT>{t.time_since_epoch()};
+    year_month_day ymd;
+    time_of_day<CT> time;
+    seconds ls{0};
     if (tp >= leaps.front())
     {
         auto const lt = std::upper_bound(leaps.begin(), leaps.end(), tp);
@@ -1122,17 +1137,52 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const utc_time<Duration>& t)
         if (tp < lt[-1])
         {
             if (tp >= lt[-1].date() - seconds{1})
-            {
-                auto const dp = floor<days>(tp);
-                auto time = make_time(tp-dp);
-                time.seconds() += seconds{1};
-                return os << year_month_day(dp) << ' ' << time;
-            }
+                ls = seconds{1};
             else
                 tp += seconds{1};
         }
     }
-    return os << tp;
+    auto const sd = floor<days>(tp);
+    ymd = sd;
+    time = make_time(tp - sd);
+    time.seconds() += ls;
+    fields<CT> fds{ymd, time};
+    to_stream(os, fmt, fds, &abbrev, &offset);
+}
+
+template <class CharT, class Traits, class Duration>
+std::basic_ostream<CharT, Traits>&
+operator<<(std::basic_ostream<CharT, Traits>& os, const utc_time<Duration>& t)
+{
+    to_stream(os, "%F %T", t);
+    return os;
+}
+
+template <class Duration, class CharT, class Traits>
+void
+from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
+            utc_time<Duration>& tp, std::basic_string<CharT, Traits>* abbrev = nullptr,
+            std::chrono::minutes* offset = nullptr)
+{
+    using namespace std;
+    using namespace std::chrono;
+    using CT = typename common_type<Duration, seconds>::type;
+    minutes offset_local{};
+    auto offptr = offset ? offset : &offset_local;
+    fields<CT> fds{};
+    from_stream(is, fmt, fds, abbrev, offptr);
+    if (!fds.ymd.ok())
+        is.setstate(ios::failbit);
+    if (!is.fail())
+    {
+        bool is_leap_second = fds.tod.seconds() == seconds{60};
+        if (is_leap_second)
+            fds.tod.seconds() -= seconds{1};
+        tp = to_utc_time(sys_days(fds.ymd) +
+                    duration_cast<Duration>(fds.tod.to_duration() - *offptr));
+        if (is_leap_second)
+            tp += seconds{1};
+    }
 }
 
 // tai_clock
@@ -1162,7 +1212,7 @@ to_utc_time(const tai_time<Duration>& t) NOEXCEPT
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return utc_time<duration>{t.time_since_epoch()} -
-            (sys_days{year{1970}/jan/1} - sys_days{year{1958}/jan/1} + seconds{10});
+            (sys_days(year{1970}/jan/1) - sys_days(year{1958}/jan/1) + seconds{10});
 }
 
 template <class Duration>
@@ -1173,7 +1223,7 @@ to_tai_time(const utc_time<Duration>& t) NOEXCEPT
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return tai_time<duration>{t.time_since_epoch()} +
-            (sys_days{year{1970}/jan/1} - sys_days{year{1958}/jan/1} + seconds{10});
+            (sys_days(year{1970}/jan/1) - sys_days(year{1958}/jan/1) + seconds{10});
 }
 
 template <class Duration>
@@ -1193,14 +1243,51 @@ tai_clock::now() NOEXCEPT
 }
 
 template <class CharT, class Traits, class Duration>
+void
+to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
+          const tai_time<Duration>& t)
+{
+    using namespace std;
+    using namespace std::chrono;
+    using CT = typename common_type<Duration, seconds>::type;
+    const string abbrev("TAI");
+    CONSTDATA seconds offset{0};
+    auto tp = sys_time<CT>{t.time_since_epoch()} -
+              (sys_days(year{1970}/jan/1) - sys_days(year{1958}/jan/1));
+    auto const sd = floor<days>(tp);
+    year_month_day ymd = sd;
+    auto time = make_time(tp - sd);
+    fields<CT> fds{ymd, time};
+    to_stream(os, fmt, fds, &abbrev, &offset);
+}
+
+template <class CharT, class Traits, class Duration>
 std::basic_ostream<CharT, Traits>&
 operator<<(std::basic_ostream<CharT, Traits>& os, const tai_time<Duration>& t)
 {
+    to_stream(os, "%F %T", t);
+    return os;
+}
+
+template <class Duration, class CharT, class Traits>
+void
+from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
+            tai_time<Duration>& tp, std::basic_string<CharT, Traits>* abbrev = nullptr,
+            std::chrono::minutes* offset = nullptr)
+{
+    using namespace std;
     using namespace std::chrono;
-    using duration = typename std::common_type<Duration, seconds>::type;
-    auto tp = sys_time<duration>{t.time_since_epoch()} -
-                (sys_days{year{1970}/jan/1} - sys_days{year{1958}/jan/1});
-    return os << tp;
+    using CT = typename common_type<Duration, seconds>::type;
+    minutes offset_local{};
+    auto offptr = offset ? offset : &offset_local;
+    fields<CT> fds{};
+    from_stream(is, fmt, fds, abbrev, offptr);
+    if (!fds.ymd.ok())
+        is.setstate(ios::failbit);
+    if (!is.fail())
+        tp = tai_time<Duration>{duration_cast<Duration>(
+                (sys_days(fds.ymd) + fds.tod.to_duration() + (sys_days(year{1970}/jan/1) -
+                sys_days(year{1958}/jan/1)) - *offptr).time_since_epoch())};
 }
 
 // gps_clock
@@ -1230,7 +1317,7 @@ to_utc_time(const gps_time<Duration>& t) NOEXCEPT
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return utc_time<duration>{t.time_since_epoch()} +
-            (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1970}/jan/1} + seconds{9});
+            (sys_days(year{1980}/jan/sun[1]) - sys_days(year{1970}/jan/1) + seconds{9});
 }
 
 template <class Duration>
@@ -1241,7 +1328,7 @@ to_gps_time(const utc_time<Duration>& t)
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return gps_time<duration>{t.time_since_epoch()} -
-            (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1970}/jan/1} + seconds{9});
+            (sys_days(year{1980}/jan/sun[1]) - sys_days(year{1970}/jan/1) + seconds{9});
 }
 
 template <class Duration>
@@ -1261,14 +1348,52 @@ gps_clock::now() NOEXCEPT
 }
 
 template <class CharT, class Traits, class Duration>
+void
+to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
+          const gps_time<Duration>& t)
+{
+    using namespace std;
+    using namespace std::chrono;
+    using CT = typename common_type<Duration, seconds>::type;
+    const string abbrev("GPS");
+    CONSTDATA seconds offset{0};
+    auto tp = sys_time<CT>{t.time_since_epoch()} +
+              (sys_days(year{1980}/jan/sun[1]) - sys_days(year{1970}/jan/1));
+    auto const sd = floor<days>(tp);
+    year_month_day ymd = sd;
+    auto time = make_time(tp - sd);
+    fields<CT> fds{ymd, time};
+    to_stream(os, fmt, fds, &abbrev, &offset);
+}
+
+template <class CharT, class Traits, class Duration>
 std::basic_ostream<CharT, Traits>&
 operator<<(std::basic_ostream<CharT, Traits>& os, const gps_time<Duration>& t)
 {
+    to_stream(os, "%F %T", t);
+    return os;
+}
+
+template <class Duration, class CharT, class Traits>
+void
+from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
+            gps_time<Duration>& tp, std::basic_string<CharT, Traits>* abbrev = nullptr,
+            std::chrono::minutes* offset = nullptr)
+{
+    using namespace std;
     using namespace std::chrono;
-    using duration = typename std::common_type<Duration, seconds>::type;
-    auto tp = sys_time<duration>{t.time_since_epoch()} +
-                (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1970}/jan/1});
-    return os << tp;
+    using CT = typename common_type<Duration, seconds>::type;
+    minutes offset_local{};
+    auto offptr = offset ? offset : &offset_local;
+    fields<CT> fds{};
+    from_stream(is, fmt, fds, abbrev, offptr);
+    if (!fds.ymd.ok())
+        is.setstate(ios::failbit);
+    if (!is.fail())
+        tp = gps_time<Duration>{duration_cast<Duration>(
+                (sys_days(fds.ymd) + fds.tod.to_duration() -
+                (sys_days(year{1980}/jan/sun[1]) -
+                sys_days(year{1970}/jan/1)) - *offptr).time_since_epoch())};
 }
 
 template <class Duration>
@@ -1295,7 +1420,7 @@ to_tai_time(const gps_time<Duration>& t) NOEXCEPT
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return tai_time<duration>{t.time_since_epoch()} +
-            (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1958}/jan/1} + seconds{19});
+            (sys_days(year{1980}/jan/sun[1]) - sys_days(year{1958}/jan/1) + seconds{19});
 }
 
 template <class Duration>
@@ -1306,61 +1431,7 @@ to_gps_time(const tai_time<Duration>& t) NOEXCEPT
     using namespace std::chrono;
     using duration = typename std::common_type<Duration, seconds>::type;
     return gps_time<duration>{t.time_since_epoch()} -
-            (sys_days{year{1980}/jan/sun[1]} - sys_days{year{1958}/jan/1} + seconds{19});
-}
-
-// format
-
-template <class CharT, class Traits, class Duration>
-void
-to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
-          const zoned_time<Duration>& tp)
-{
-    auto const info = tp.get_info();
-    to_stream(os, fmt, tp.get_local_time(), &info.abbrev, &info.offset);
-}
-
-// basic_string formats
-
-template <class CharT, class Traits, class Duration>
-std::basic_string<CharT, Traits>
-format(const std::locale& loc, const std::basic_string<CharT, Traits>& fmt,
-       const zoned_time<Duration>& tp)
-{
-    std::basic_ostringstream<CharT, Traits> os;
-    os.imbue(loc);
-    to_stream(os, fmt.c_str(), tp);
-    return os.str();
-}
-
-template <class CharT, class Traits, class Duration>
-std::basic_string<CharT, Traits>
-format(const std::basic_string<CharT, Traits>& fmt, const zoned_time<Duration>& tp)
-{
-    std::basic_ostringstream<CharT, Traits> os;
-    to_stream(os, fmt.c_str(), tp);
-    return os.str();
-}
-
-// const CharT* formats
-
-template <class CharT, class Duration>
-std::basic_string<CharT>
-format(const std::locale& loc, const CharT* fmt, const zoned_time<Duration>& tp)
-{
-    std::basic_ostringstream<CharT> os;
-    os.imbue(loc);
-    to_stream(os, fmt, tp);
-    return os.str();
-}
-
-template <class CharT, class Duration>
-std::basic_string<CharT>
-format(const CharT* fmt, const zoned_time<Duration>& tp)
-{
-    std::basic_ostringstream<CharT> os;
-    to_stream(os, fmt, tp);
-    return os.str();
+            (sys_days(year{1980}/jan/sun[1]) - sys_days(year{1958}/jan/1) + seconds{19});
 }
 
 }  // namespace date
