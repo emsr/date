@@ -3,7 +3,7 @@
 
 // The MIT License (MIT)
 //
-// Copyright (c) 2015, 2016 Howard Hinnant
+// Copyright (c) 2015, 2016, 2017 Howard Hinnant
 // Copyright (c) 2017 Jiangang Zhuang
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,16 +25,16 @@
 // SOFTWARE.
 //
 // Our apologies.  When the previous paragraph was written, lowercase had not yet
-// been invented (that woud involve another several millennia of evolution).
+// been invented (that would involve another several millennia of evolution).
 // We did not mean to shout.
 
 // Get more recent database at http://www.iana.org/time-zones
 
 // The notion of "current timezone" is something the operating system is expected to "just
 // know". How it knows this is system specific. It's often a value set by the user at OS
-// intallation time and recorded by the OS somewhere. On Linux and Mac systems the current
+// installation time and recorded by the OS somewhere. On Linux and Mac systems the current
 // timezone name is obtained by looking at the name or contents of a particular file on
-// disk. On Windows the current timzeone name comes from the registry. In either method,
+// disk. On Windows the current timezone name comes from the registry. In either method,
 // there is no guarantee that the "native" current timezone name obtained will match any
 // of the "Standard" names in this library's "database". On Linux, the names usually do
 // seem to match so mapping functions to map from native to "Standard" are typically not
@@ -141,25 +141,25 @@ private:
 template <class Duration>
 inline
 nonexistent_local_time::nonexistent_local_time(local_time<Duration> tp,
-                                               local_seconds first,
+                                               local_seconds begin,
                                                const std::string& first_abbrev,
-                                               local_seconds last,
+                                               local_seconds end,
                                                const std::string& last_abbrev,
                                                sys_seconds time_sys)
-    : std::runtime_error(make_msg(tp, first, first_abbrev, last, last_abbrev, time_sys))
+    : std::runtime_error(make_msg(tp, begin, first_abbrev, end, last_abbrev, time_sys))
     {}
 
 template <class Duration>
 std::string
-nonexistent_local_time::make_msg(local_time<Duration> tp, local_seconds first,
-                                 const std::string& first_abbrev, local_seconds last,
+nonexistent_local_time::make_msg(local_time<Duration> tp, local_seconds begin,
+                                 const std::string& first_abbrev, local_seconds end,
                                  const std::string& last_abbrev, sys_seconds time_sys)
 {
     using namespace date;
     std::ostringstream os;
     os << tp << " is in a gap between\n"
-       << first << ' ' << first_abbrev << " and\n"
-       << last  << ' ' << last_abbrev
+       << begin << ' ' << first_abbrev << " and\n"
+       << end   << ' ' << last_abbrev
        << " which are both equivalent to\n"
        << time_sys << " UTC";
     return os.str();
@@ -284,16 +284,21 @@ public:
 
     zoned_time(const time_zone* z,      const local_time<Duration>& tp);
     zoned_time(const std::string& name, const local_time<Duration>& tp);
+    zoned_time(const char* name,        const local_time<Duration>& tp);
     zoned_time(const time_zone* z,      const local_time<Duration>& tp, choose c);
     zoned_time(const std::string& name, const local_time<Duration>& tp, choose c);
+    zoned_time(const char* name,        const local_time<Duration>& tp, choose c);
 
     zoned_time(const time_zone* z,      const zoned_time<Duration>& zt);
     zoned_time(const std::string& name, const zoned_time<Duration>& zt);
+    zoned_time(const char* name,        const zoned_time<Duration>& zt);
     zoned_time(const time_zone* z,      const zoned_time<Duration>& zt, choose);
     zoned_time(const std::string& name, const zoned_time<Duration>& zt, choose);
+    zoned_time(const char* name,        const zoned_time<Duration>& zt, choose);
 
     zoned_time(const time_zone* z,      const sys_time<Duration>& st);
     zoned_time(const std::string& name, const sys_time<Duration>& st);
+    zoned_time(const char* name,        const sys_time<Duration>& st);
 
     zoned_time& operator=(const sys_time<Duration>& st);
     zoned_time& operator=(const local_time<Duration>& ut);
@@ -807,6 +812,14 @@ zoned_time<Duration>::zoned_time(const std::string& name)
     {}
 
 template <class Duration>
+template <class Duration2, class>
+inline
+zoned_time<Duration>::zoned_time(const zoned_time<Duration2>& zt) NOEXCEPT
+    : zone_(zt.zone_)
+    , tp_(zt.tp_)
+    {}
+
+template <class Duration>
 inline
 zoned_time<Duration>::zoned_time(const time_zone* z, const local_time<Duration>& t)
     : zone_(z)
@@ -816,6 +829,12 @@ zoned_time<Duration>::zoned_time(const time_zone* z, const local_time<Duration>&
 template <class Duration>
 inline
 zoned_time<Duration>::zoned_time(const std::string& name, const local_time<Duration>& t)
+    : zoned_time(locate_zone(name), t)
+    {}
+
+template <class Duration>
+inline
+zoned_time<Duration>::zoned_time(const char* name, const local_time<Duration>& t)
     : zoned_time(locate_zone(name), t)
     {}
 
@@ -835,11 +854,10 @@ zoned_time<Duration>::zoned_time(const std::string& name, const local_time<Durat
     {}
 
 template <class Duration>
-template <class Duration2, class>
 inline
-zoned_time<Duration>::zoned_time(const zoned_time<Duration2>& zt) NOEXCEPT
-    : zone_(zt.zone_)
-    , tp_(zt.tp_)
+zoned_time<Duration>::zoned_time(const char* name, const local_time<Duration>& t,
+                                 choose c)
+    : zoned_time(locate_zone(name), t, c)
     {}
 
 template <class Duration>
@@ -852,6 +870,12 @@ zoned_time<Duration>::zoned_time(const time_zone* z, const zoned_time<Duration>&
 template <class Duration>
 inline
 zoned_time<Duration>::zoned_time(const std::string& name, const zoned_time<Duration>& zt)
+    : zoned_time(locate_zone(name), zt)
+    {}
+
+template <class Duration>
+inline
+zoned_time<Duration>::zoned_time(const char* name, const zoned_time<Duration>& zt)
     : zoned_time(locate_zone(name), zt)
     {}
 
@@ -870,6 +894,13 @@ zoned_time<Duration>::zoned_time(const std::string& name,
 
 template <class Duration>
 inline
+zoned_time<Duration>::zoned_time(const char* name,
+                                 const zoned_time<Duration>& zt, choose c)
+    : zoned_time(locate_zone(name), zt, c)
+    {}
+
+template <class Duration>
+inline
 zoned_time<Duration>::zoned_time(const time_zone* z, const sys_time<Duration>& st)
     : zone_(z)
     , tp_(st)
@@ -881,6 +912,11 @@ zoned_time<Duration>::zoned_time(const std::string& name, const sys_time<Duratio
     : zoned_time(locate_zone(name), st)
     {}
 
+template <class Duration>
+inline
+zoned_time<Duration>::zoned_time(const char* name, const sys_time<Duration>& st)
+    : zoned_time(locate_zone(name), st)
+    {}
 
 template <class Duration>
 inline
@@ -1158,10 +1194,10 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const utc_time<Duration>& t)
     return os;
 }
 
-template <class Duration, class CharT, class Traits>
+template <class Duration, class CharT, class Traits, class Alloc = std::allocator<CharT>>
 void
 from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
-            utc_time<Duration>& tp, std::basic_string<CharT, Traits>* abbrev = nullptr,
+            utc_time<Duration>& tp, std::basic_string<CharT, Traits, Alloc>* abbrev = nullptr,
             std::chrono::minutes* offset = nullptr)
 {
     using namespace std;
@@ -1269,10 +1305,11 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const tai_time<Duration>& t)
     return os;
 }
 
-template <class Duration, class CharT, class Traits>
+template <class Duration, class CharT, class Traits, class Alloc = std::allocator<CharT>>
 void
 from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
-            tai_time<Duration>& tp, std::basic_string<CharT, Traits>* abbrev = nullptr,
+            tai_time<Duration>& tp,
+            std::basic_string<CharT, Traits, Alloc>* abbrev = nullptr,
             std::chrono::minutes* offset = nullptr)
 {
     using namespace std;
@@ -1374,10 +1411,11 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const gps_time<Duration>& t)
     return os;
 }
 
-template <class Duration, class CharT, class Traits>
+template <class Duration, class CharT, class Traits, class Alloc = std::allocator<CharT>>
 void
 from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
-            gps_time<Duration>& tp, std::basic_string<CharT, Traits>* abbrev = nullptr,
+            gps_time<Duration>& tp,
+            std::basic_string<CharT, Traits, Alloc>* abbrev = nullptr,
             std::chrono::minutes* offset = nullptr)
 {
     using namespace std;

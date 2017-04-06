@@ -1,10 +1,11 @@
 // The MIT License (MIT)
 //
-// Copyright (c) 2015, 2016 Howard Hinnant
+// Copyright (c) 2015, 2016, 2017 Howard Hinnant
 // Copyright (c) 2015 Ville Voutilainen
 // Copyright (c) 2016 Alexander Kormanovsky
 // Copyright (c) 2016, 2017 Jiangang Zhuang
 // Copyright (c) 2017 Nicolas Veloz Savino
+// Copyright (c) 2017 Florian Dang
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,15 +26,15 @@
 // SOFTWARE.
 //
 // Our apologies.  When the previous paragraph was written, lowercase had not yet
-// been invented (that woud involve another several millennia of evolution).
+// been invented (that would involve another several millennia of evolution).
 // We did not mean to shout.
 
 #ifdef _WIN32
 // Windows.h will be included directly and indirectly (e.g. by curl).
 // We need to define these macros to prevent Windows.h bringing in
-// more than we need and do it eearly so Windows.h doesn't get included
+// more than we need and do it early so Windows.h doesn't get included
 // without these macros having been defined.
-// min/max macrosinterfere with the C++ versions.
+// min/max macros interfere with the C++ versions.
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -140,6 +141,12 @@ static CONSTDATA char folder_delimiter = '/';
 
 #endif
 
+#if __GNUC__ < 5
+// GCC 4.9 Bug 61489 Wrong warning with -Wmissing-field-initializers
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
+
 #ifdef _WIN32
 
 namespace
@@ -210,6 +217,14 @@ expand_path(std::string path)
 
 #  endif  // !INSTALL
 
+static
+std::string
+get_download_folder()
+{
+    return expand_path("~/Downloads");
+}
+
+
 #endif  // !_WIN32
 
 namespace date
@@ -227,11 +242,7 @@ access_install()
     static std::string install 
 #ifndef INSTALL
 
-#  ifdef _WIN32
     = get_download_folder() + folder_delimiter + "tzdata";
-#  else
-    = expand_path("~/Downloads/tzdata");
-#  endif
 
 #else   // INSTALL
 
@@ -585,7 +596,7 @@ sort_zone_mappings(std::vector<date::detail::timezone_mapping>& mappings)
     });
 }
 
-// This routine maps Win32 OS error codes to readable text strngs.
+// This routine maps Win32 OS error codes to readable text strings.
 static
 std::string
 get_win32_message(DWORD error_code)
@@ -2269,9 +2280,9 @@ download_to_string(const std::string& url, std::string& str)
     curl_write_callback write_cb = [](char* contents, std::size_t size, std::size_t nmemb,
                                       void* userp) -> std::size_t
     {
-        auto& str = *static_cast<std::string*>(userp);
+        auto& userstr = *static_cast<std::string*>(userp);
         auto realsize = size * nmemb;
-        str.append(contents, realsize);
+        userstr.append(contents, realsize);
         return realsize;
     };
     curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_cb);
@@ -2333,25 +2344,6 @@ remote_version()
     return version;
 }
 
-bool
-remote_download(const std::string& version)
-{
-    assert(!version.empty());
-    auto url = "http://www.iana.org/time-zones/repository/releases/tzdata" + version +
-               ".tar.gz";
-    bool result = download_to_file(url, get_download_gz_file(version),
-                                   download_file_options::binary);
-#ifdef TIMEZONE_MAPPING
-    if (result)
-    {
-        auto mapping_file = get_download_mapping_file(version);
-        result = download_to_file("http://unicode.org/repos/cldr/trunk/common/"
-                                  "supplemental/windowsZones.xml",
-            mapping_file, download_file_options::text);
-    }
-#endif
-    return result;
-}
 
 // TODO! Using system() create a process and a console window.
 // This is useful to see what errors may occur but is slow and distracting.
@@ -2617,7 +2609,7 @@ extract_gz_file(const std::string& version, const std::string& gz_file,
 
 #if USE_SHELL_API
     // When using shelling out with std::system() extra quotes are required around the
-    // whole command. It's weird but neccessary it seems, see:
+    // whole command. It's weird but necessary it seems, see:
     // http://stackoverflow.com/q/27975969/576911
 
     cmd = "\"" + cmd + "\"";
@@ -2726,6 +2718,38 @@ extract_gz_file(const std::string&, const std::string& gz_file, const std::strin
 }
 
 #endif // !_WIN32
+
+bool
+remote_download(const std::string& version)
+{
+    assert(!version.empty());
+
+#ifdef _WIN32
+    // Download folder should be always available for Windows
+#else
+    // Create download folder if it does not exist on UNIX system
+    auto download_folder = get_download_folder();
+    if (!file_exists(download_folder)) 
+    {
+        make_directory(download_folder);
+    }
+#endif
+
+    auto url = "http://www.iana.org/time-zones/repository/releases/tzdata" + version +
+               ".tar.gz";
+    bool result = download_to_file(url, get_download_gz_file(version),
+                                   download_file_options::binary);
+#ifdef TIMEZONE_MAPPING
+    if (result)
+    {
+        auto mapping_file = get_download_mapping_file(version);
+        result = download_to_file("http://unicode.org/repos/cldr/trunk/common/"
+                                  "supplemental/windowsZones.xml",
+            mapping_file, download_file_options::text);
+    }
+#endif
+    return result;
+}
 
 bool
 remote_install(const std::string& version)
@@ -3082,12 +3106,6 @@ current_zone()
 
 #else // !WIN32
 
-#ifdef __GNUC__
-// GCC complains about unused return from strerror_r
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-result"
-#endif
-
 const time_zone*
 current_zone()
 {
@@ -3116,7 +3134,8 @@ current_zone()
         {
             std::ostringstream os;
             char message[128];
-            (void)strerror_r(errno, message, 128);
+            if (strerror_r(errno, message, sizeof(message)) != 0)
+                message[0] = '\0';
             os << "realpath failure: errno = " << errno << "; " << message;
             throw std::runtime_error(os.str());
         }
@@ -3165,10 +3184,6 @@ current_zone()
     throw std::runtime_error("Could not get current timezone");
 }
 
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
-
 #endif // !WIN32
 
 #if defined(TZ_TEST) && defined(TIMEZONE_MAPPING)
@@ -3190,4 +3205,9 @@ locate_native_zone(const std::string& native_tz_name)
 
 #endif  // TZ_TEST && TIMEZONE_MAPPING
 
+
 }  // namespace date
+
+#if __GNUC__ < 5
+# pragma GCC diagnostic pop
+#endif
