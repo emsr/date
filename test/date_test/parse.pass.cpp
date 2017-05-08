@@ -728,6 +728,93 @@ test_trailing_Z()
     assert(input.eof());
 }
 
+void
+test_leading_ws()
+{
+    using namespace std;
+    using namespace date;
+    istringstream in{"05/04/17 5/4/17"};
+    year_month_day d1, d2;
+    in >> parse("%D", d1) >> parse("%n%D", d2);
+    assert(d1 == may/4/2017);
+    assert(d2 == may/4/2017);
+}
+
+void
+test_space()
+{
+    using namespace std;
+    using namespace date;
+    {
+        istringstream in{"05/04/17"};
+        year_month_day d1;
+        in >> parse(" %D", d1);
+        assert(d1 == may/4/2017);
+    }
+    {
+        istringstream in{" 05/04/17"};
+        year_month_day d1;
+        in >> parse(" %D", d1);
+        assert(d1 == may/4/2017);
+    }
+    {
+        istringstream in{"  05/04/17"};
+        year_month_day d1;
+        in >> parse(" %D", d1);
+        assert(d1 == may/4/2017);
+    }
+}
+
+void
+test_n()
+{
+    using namespace std;
+    using namespace date;
+    {
+        istringstream in{"05/04/17"};
+        year_month_day d1;
+        in >> parse("%n%D", d1);
+        assert(in.fail());
+    }
+    {
+        istringstream in{" 05/04/17"};
+        year_month_day d1;
+        in >> parse("%n%D", d1);
+        assert(d1 == may/4/2017);
+    }
+    {
+        istringstream in{"  05/04/17"};
+        year_month_day d1;
+        in >> parse("%n%D", d1);
+        assert(in.fail());
+    }
+}
+
+void
+test_t()
+{
+    using namespace std;
+    using namespace date;
+    {
+        istringstream in{"05/04/17"};
+        year_month_day d1;
+        in >> parse("%t%D", d1);
+        assert(d1 == may/4/2017);
+    }
+    {
+        istringstream in{" 05/04/17"};
+        year_month_day d1;
+        in >> parse("%t%D", d1);
+        assert(d1 == may/4/2017);
+    }
+    {
+        istringstream in{"  05/04/17"};
+        year_month_day d1;
+        in >> parse("%t%D", d1);
+        assert(in.fail());
+    }
+}
+
 int
 main()
 {
@@ -756,4 +843,8 @@ main()
     test_z();
     test_Z();
     test_trailing_Z();
+    test_leading_ws();
+    test_space();
+    test_n();
+    test_t();
 }
