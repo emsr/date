@@ -29,11 +29,14 @@ This is actually several separate C++11/C++14 libraries:
 
     * Documentation: http://howardhinnant.github.io/date/islamic.html
 
-`"date.h"` and `"tz.h"` are now being proposed for standardization: http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2017/p0355r2.html
+`"date.h"` and `"tz.h"` are now being proposed for standardization:
 
-<hr/>
+   * Current proposal:  http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2017/p0355r3.html
 
-**Projects that use this project**
+   * Revision 4 draft:  http://howardhinnant.github.io/date/d0355r4.html
 
+List of projects using this library:
 
-If you would like to see your project listed here, and it isn't, please let me know.  If your project is listed here and it shouldn't be, please let me know.
+   * www.safe.com
+
+If you would like your project (or product) on this list, just let me know.
