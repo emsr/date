@@ -85,6 +85,13 @@ namespace date
 #    define NOEXCEPT noexcept
 #  endif
 
+#elif defined(__SUNPRO_CC) && __SUNPRO_CC <= 0x5150
+// Oracle Developer Studio 12.6 and earlier
+#  define CONSTDATA constexpr const
+#  define CONSTCD11 constexpr
+#  define CONSTCD14
+#  define NOEXCEPT noexcept
+
 #elif __cplusplus >= 201402
 // C++14
 #  define CONSTDATA constexpr const
@@ -97,6 +104,19 @@ namespace date
 #  define CONSTCD11 constexpr
 #  define CONSTCD14
 #  define NOEXCEPT noexcept
+#endif
+
+#ifndef HAS_VOID_T
+#  if __cplusplus >= 201703
+#    define HAS_VOID_T 1
+#  else
+#    define HAS_VOID_T 0
+#  endif
+#endif  // HAS_VOID_T
+
+// Protect from Oracle sun macro
+#ifdef sun
+#  undef sun
 #endif
 
 //-----------+
@@ -376,7 +396,6 @@ class weekday
 public:
     weekday() = default;
     explicit CONSTCD11 weekday(unsigned wd) NOEXCEPT;
-    explicit weekday(int) = delete;
     CONSTCD11 weekday(const sys_days& dp) NOEXCEPT;
     CONSTCD11 explicit weekday(const local_days& dp) NOEXCEPT;
 
@@ -880,6 +899,22 @@ CONSTCD11 date::year operator "" _y(unsigned long long y) NOEXCEPT;
 
 }  // inline namespace literals
 #endif // !defined(_MSC_VER) || (_MSC_VER >= 1900)
+
+#if HAS_VOID_T
+
+template <class T, class = std::void_t<>>
+struct is_clock
+    : std::false_type
+{};
+
+template <class T>
+struct is_clock<T, std::void_t<decltype(T::now()), typename T::rep, typename T::period,
+                               typename T::duration, typename T::time_point,
+                               decltype(T::is_steady)>>
+    : std::true_type
+{};
+
+#endif  // HAS_VOID_T
 
 //----------------+
 // Implementation |
@@ -1419,7 +1454,7 @@ inline
 year
 year::min() NOEXCEPT
 {
-    return year{std::numeric_limits<short>::min()+1};
+    return year{-32767};
 }
 
 CONSTCD11
@@ -1427,7 +1462,7 @@ inline
 year
 year::max() NOEXCEPT
 {
-    return year{std::numeric_limits<short>::max()};
+    return year{32767};
 }
 
 CONSTCD11
@@ -6550,7 +6585,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
     if (!fds.ymd.ok() || !fds.tod.in_conventional_range())
         is.setstate(ios::failbit);
     if (!is.fail())
-        tp = sys_days(fds.ymd) + duration_cast<Duration>(fds.tod.to_duration() - *offptr);
+        tp = round<Duration>(sys_days(fds.ymd) + fds.tod.to_duration() - *offptr);
     return is;
 }
 
@@ -6568,7 +6603,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
     if (!fds.ymd.ok() || !fds.tod.in_conventional_range())
         is.setstate(ios::failbit);
     if (!is.fail())
-        tp = local_days(fds.ymd) + duration_cast<Duration>(fds.tod.to_duration());
+        tp = round<Duration>(local_days(fds.ymd) + fds.tod.to_duration());
     return is;
 }
 
@@ -6717,7 +6752,8 @@ parse(const CharT* format, Parsable& tp,
 namespace detail
 {
 
-#if __cplusplus >= 201402  && (!defined(__EDG_VERSION__) || __EDG_VERSION__ > 411)
+#if __cplusplus >= 201402  && (!defined(__EDG_VERSION__) || __EDG_VERSION__ > 411) \
+                           && (!defined(__SUNPRO_CC) || __SUNPRO_CC > 0x5150)
 
 template <class CharT, std::size_t N>
 class string_literal

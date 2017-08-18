@@ -319,11 +319,62 @@ struct undocumented {explicit undocumented() = default;};
 static_assert(min_year <= max_year, "Configuration error");
 #endif
 
-static
-TZ_DB&
-access_tzdb()
+static std::unique_ptr<TZ_DB> init_tzdb();
+
+tzdb_list::~tzdb_list()
 {
-    static TZ_DB tz_db;
+    const TZ_DB* ptr = head_;
+    head_ = nullptr;
+    while (ptr != nullptr)
+    {
+        auto next = ptr->next;
+        delete ptr;
+        ptr = next;
+    }
+}
+
+tzdb_list::tzdb_list(tzdb_list&& x) noexcept
+   : head_{x.head_.exchange(nullptr)}
+{
+}
+
+void
+tzdb_list::push_front(TZ_DB* tzdb) noexcept
+{
+    tzdb->next = head_;
+    head_ = tzdb;
+}
+
+tzdb_list::const_iterator
+tzdb_list::erase_after(const_iterator p) noexcept
+{
+    auto t = p.p_->next;
+    p.p_->next = p.p_->next->next;
+    delete t;
+    return ++p;
+}
+
+struct tzdb_list::undocumented_helper
+{
+    static void push_front(tzdb_list& db_list, TZ_DB* tzdb) noexcept
+    {
+        db_list.push_front(tzdb);
+    }
+};
+
+static
+tzdb_list
+create_tzdb()
+{
+    tzdb_list tz_db;
+    tzdb_list::undocumented_helper::push_front(tz_db, init_tzdb().release());
+    return tz_db;
+}
+
+tzdb_list&
+get_tzdb_list()
+{
+    static tzdb_list tz_db = create_tzdb();
     return tz_db;
 }
 
@@ -1614,7 +1665,7 @@ template <class T>
 static
 inline
 void
-maybe_reverse_bytes(T& t, std::false_type)
+maybe_reverse_bytes(T&, std::false_type)
 {
 }
 
@@ -1846,7 +1897,7 @@ time_zone::load_data(std::istream& inf,
     auto infos = load_ttinfo(inf, tzh_typecnt);
     auto abbrev = load_abbreviations(inf, tzh_charcnt);
 #if !MISSING_LEAP_SECONDS
-    auto& leap_seconds = access_tzdb().leaps;
+    auto& leap_seconds = get_tzdb_list().front().leaps;
     if (leap_seconds.empty() && tzh_leapcnt > 0)
         leap_seconds = load_leaps<TimeType>(inf, tzh_leapcnt);
 #endif
@@ -1914,14 +1965,14 @@ time_zone::init_impl()
 #if !MISSING_LEAP_SECONDS
     if (tzh_leapcnt > 0)
     {
-        auto& leap_seconds = access_tzdb().leaps;
+        auto& leap_seconds = get_tzdb_list().front().leaps;
         auto itr = leap_seconds.begin();
         auto l = itr->date();
         seconds leap_count{0};
         for (auto t = std::upper_bound(transitions_.begin(), transitions_.end(), l,
-                                       [](const sys_seconds& x, const transition& t)
+                                       [](const sys_seconds& x, const transition& ct)
                                        {
-                                           return x < t.timepoint;
+                                           return x < ct.timepoint;
                                        });
                   t != transitions_.end(); ++t)
         {
@@ -2465,6 +2516,7 @@ operator<<(std::ostream& os, const leap& x)
 
 #if USE_OS_TZDB
 
+# ifdef __APPLE__
 static
 std::string
 get_version()
@@ -2478,12 +2530,13 @@ get_version()
         throw std::runtime_error("Unable to get Timezone database version from " + path);
     return version;
 }
+# endif
 
 static
-TZ_DB
+std::unique_ptr<TZ_DB>
 init_tzdb()
 {
-    TZ_DB db;
+    std::unique_ptr<TZ_DB> db(new TZ_DB);
 
     //Iterate through folders
     std::queue<std::string> subfolders;
@@ -2522,22 +2575,22 @@ init_tzdb()
                 }
                 else
                 {
-                    db.zones.emplace_back(subname.substr(sizeof(tz_dir)),
-                                          detail::undocumented{});
+                    db->zones.emplace_back(subname.substr(sizeof(tz_dir)),
+                                           detail::undocumented{});
                 }
             }
         }
         closedir(dir);
     }
-    db.zones.shrink_to_fit();
-    std::sort(db.zones.begin(), db.zones.end());
+    db->zones.shrink_to_fit();
+    std::sort(db->zones.begin(), db->zones.end());
 #  if !MISSING_LEAP_SECONDS
     std::ifstream in(tz_dir + std::string(1, folder_delimiter) + "right/UTC",
                      std::ios_base::binary);
     if (in)
     {
         in.exceptions(std::ios::failbit | std::ios::badbit);
-        db.leaps = load_just_leaps(in);
+        db->leaps = load_just_leaps(in);
     }
     else
     {
@@ -2546,11 +2599,11 @@ init_tzdb()
         if (!in)
             throw std::runtime_error("Unable to extract leap second information");
         in.exceptions(std::ios::failbit | std::ios::badbit);
-        db.leaps = load_just_leaps(in);
+        db->leaps = load_just_leaps(in);
     }
 #  endif  // !MISSING_LEAP_SECONDS
 #  ifdef __APPLE__
-    db.version = get_version();
+    db->version = get_version();
 #  endif
     return db;
 }
@@ -2617,15 +2670,26 @@ curl_global()
     return 0;
 }
 
-static const auto curl_delete = [](CURL* p) {::curl_easy_cleanup(p);};
+namespace
+{
+
+struct curl_deleter
+{
+    void operator()(CURL* p) const
+    {
+        ::curl_easy_cleanup(p);
+    }
+};
+
+}  // unnamed namespace
 
 static
-std::unique_ptr<CURL, decltype(curl_delete)>
+std::unique_ptr<CURL, curl_deleter>
 curl_init()
 {
     static const auto curl_is_now_initiailized = curl_global();
     (void)curl_is_now_initiailized;
-    return std::unique_ptr<CURL, decltype(curl_delete)>{::curl_easy_init(), curl_delete};
+    return std::unique_ptr<CURL, curl_deleter>{::curl_easy_init()};
 }
 
 static
@@ -3176,7 +3240,7 @@ get_version(const std::string& path)
 }
 
 static
-TZ_DB
+std::unique_ptr<TZ_DB>
 init_tzdb()
 {
     using namespace date;
@@ -3184,7 +3248,7 @@ init_tzdb()
     const std::string path = install + folder_delimiter;
     std::string line;
     bool continue_zone = false;
-    TZ_DB db;
+    std::unique_ptr<TZ_DB> db(new TZ_DB);
 
 #if AUTO_DOWNLOAD
     if (!file_exists(install))
@@ -3209,18 +3273,18 @@ init_tzdb()
             msg += "\"";
             throw std::runtime_error(msg);
         }
-        db.version = get_version(path);
+        db->version = get_version(path);
     }
     else
     {
-        db.version = get_version(path);
+        db->version = get_version(path);
         auto rv = remote_version();
-        if (!rv.empty() && db.version != rv)
+        if (!rv.empty() && db->version != rv)
         {
             if (remote_download(rv))
             {
                 remote_install(rv);
-                db.version = get_version(path);
+                db->version = get_version(path);
             }
         }
     }
@@ -3232,7 +3296,7 @@ init_tzdb()
         msg += "\"";
         throw std::runtime_error(msg);
     }
-    db.version = get_version(path);
+    db->version = get_version(path);
 #endif  // !AUTO_DOWNLOAD
 
     CONSTDATA char*const files[] =
@@ -3254,27 +3318,27 @@ init_tzdb()
                 in >> word;
                 if (word == "Rule")
                 {
-                    db.rules.push_back(Rule(line));
+                    db->rules.push_back(Rule(line));
                     continue_zone = false;
                 }
                 else if (word == "Link")
                 {
-                    db.links.push_back(link(line));
+                    db->links.push_back(link(line));
                     continue_zone = false;
                 }
                 else if (word == "Leap")
                 {
-                    db.leaps.push_back(leap(line, detail::undocumented{}));
+                    db->leaps.push_back(leap(line, detail::undocumented{}));
                     continue_zone = false;
                 }
                 else if (word == "Zone")
                 {
-                    db.zones.push_back(time_zone(line, detail::undocumented{}));
+                    db->zones.push_back(time_zone(line, detail::undocumented{}));
                     continue_zone = true;
                 }
                 else if (line[0] == '\t' && continue_zone)
                 {
-                    db.zones.back().add(line);
+                    db->zones.back().add(line);
                 }
                 else
                 {
@@ -3283,19 +3347,19 @@ init_tzdb()
             }
         }
     }
-    std::sort(db.rules.begin(), db.rules.end());
-    Rule::split_overlaps(db.rules);
-    std::sort(db.zones.begin(), db.zones.end());
-    db.zones.shrink_to_fit();
-    std::sort(db.links.begin(), db.links.end());
-    db.links.shrink_to_fit();
-    std::sort(db.leaps.begin(), db.leaps.end());
-    db.leaps.shrink_to_fit();
+    std::sort(db->rules.begin(), db->rules.end());
+    Rule::split_overlaps(db->rules);
+    std::sort(db->zones.begin(), db->zones.end());
+    db->zones.shrink_to_fit();
+    std::sort(db->links.begin(), db->links.end());
+    db->links.shrink_to_fit();
+    std::sort(db->leaps.begin(), db->leaps.end());
+    db->leaps.shrink_to_fit();
 
 #ifdef _WIN32
     std::string mapping_file = get_install() + folder_delimiter + "windowsZones.xml";
-    db.mappings = load_timezone_mappings_from_xml_file(mapping_file);
-    sort_zone_mappings(db.mappings);
+    db->mappings = load_timezone_mappings_from_xml_file(mapping_file);
+    sort_zone_mappings(db->mappings);
 #endif // _WIN32
 
     return db;
@@ -3305,11 +3369,12 @@ const TZ_DB&
 reload_tzdb()
 {
 #if AUTO_DOWNLOAD
-    auto const& v = access_tzdb().version;
+    auto const& v = get_tzdb_list().front().version;
     if (!v.empty() && v == remote_version())
-        return access_tzdb();
+        return get_tzdb_list().front();
 #endif  // AUTO_DOWNLOAD
-    return access_tzdb() = init_tzdb();
+    tzdb_list::undocumented_helper::push_front(get_tzdb_list(), init_tzdb().release());
+    return get_tzdb_list().front();
 }
 
 #endif  // !USE_OS_TZDB
@@ -3317,41 +3382,61 @@ reload_tzdb()
 const TZ_DB&
 get_tzdb()
 {
-    static const TZ_DB& ref = access_tzdb() = init_tzdb();
-    return ref;
+    return get_tzdb_list().front();
 }
 
 const time_zone*
-locate_zone(const std::string& tz_name)
+#if HAS_STRING_VIEW
+TZ_DB::locate_zone(std::string_view tz_name) const
+#else
+TZ_DB::locate_zone(const std::string& tz_name) const
+#endif
 {
-    const auto& db = get_tzdb();
-    auto zi = std::lower_bound(db.zones.begin(), db.zones.end(), tz_name,
+    auto zi = std::lower_bound(zones.begin(), zones.end(), tz_name,
+#if HAS_STRING_VIEW
+        [](const time_zone& z, const std::string_view& nm)
+#else
         [](const time_zone& z, const std::string& nm)
+#endif
         {
             return z.name() < nm;
         });
-    if (zi == db.zones.end() || zi->name() != tz_name)
+    if (zi == zones.end() || zi->name() != tz_name)
     {
 #if !USE_OS_TZDB
-        auto li = std::lower_bound(db.links.begin(), db.links.end(), tz_name,
+        auto li = std::lower_bound(links.begin(), links.end(), tz_name,
+#if HAS_STRING_VIEW
+        [](const link& z, const std::string_view& nm)
+#else
         [](const link& z, const std::string& nm)
+#endif
         {
             return z.name() < nm;
         });
-        if (li != db.links.end() && li->name() == tz_name)
+        if (li != links.end() && li->name() == tz_name)
         {
-            zi = std::lower_bound(db.zones.begin(), db.zones.end(), li->target(),
+            zi = std::lower_bound(zones.begin(), zones.end(), li->target(),
                 [](const time_zone& z, const std::string& nm)
                 {
                     return z.name() < nm;
                 });
-            if (zi != db.zones.end() && zi->name() == li->target())
+            if (zi != zones.end() && zi->name() == li->target())
                 return &*zi;
         }
 #endif  // !USE_OS_TZDB
-        throw std::runtime_error(tz_name + " not found in timezone database");
+        throw std::runtime_error(std::string(tz_name) + " not found in timezone database");
     }
     return &*zi;
+}
+
+const time_zone*
+#if HAS_STRING_VIEW
+locate_zone(std::string_view tz_name)
+#else
+locate_zone(const std::string& tz_name)
+#endif
+{
+    return get_tzdb().locate_zone(tz_name);
 }
 
 #if USE_OS_TZDB
@@ -3454,7 +3539,7 @@ getTimeZoneKeyName()
 }
 
 const time_zone*
-current_zone()
+TZ_DB::current_zone() const
 {
     std::string win_tzid = getTimeZoneKeyName();
     std::string standard_tzid;
@@ -3472,7 +3557,7 @@ current_zone()
 #else  // !_WIN32
 
 const time_zone*
-current_zone()
+TZ_DB::current_zone() const
 {
     // On some OS's a file called /etc/localtime may
     // exist and it may be either a real file
@@ -3542,6 +3627,12 @@ current_zone()
 }
 
 #endif  // !_WIN32
+
+const time_zone*
+current_zone()
+{
+    return get_tzdb().current_zone();
+}
 
 }  // namespace date
 
