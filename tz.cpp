@@ -182,7 +182,7 @@ get_known_folder(const GUID& folderid)
 {
     std::string folder;
     PWSTR pfolder = nullptr;
-    HRESULT hr = SHGetKnownFolderPath(folderid, KF_FLAG_DEFAULT, NULL, &pfolder);
+    HRESULT hr = SHGetKnownFolderPath(folderid, KF_FLAG_DEFAULT, nullptr, &pfolder);
     if (SUCCEEDED(hr))
     {
         co_task_mem_ptr folder_ptr(pfolder);
@@ -211,10 +211,11 @@ expand_path(std::string path)
     return date::iOSUtils::get_tzdata_path();
 #      else  // !TARGET_OS_IPHONE
     ::wordexp_t w{};
+    std::unique_ptr<::wordexp_t, void(*)(::wordexp_t*)> hold{&w, ::wordfree}; 
     ::wordexp(path.c_str(), &w, 0);
-    assert(w.we_wordc == 1);
+    if (w.we_wordc != 1)  
+        throw std::runtime_error("Cannot expand path: " + path);  
     path = w.we_wordv[0];
-    ::wordfree(&w);
     return path;
 #      endif  // !TARGET_OS_IPHONE
 }
@@ -258,6 +259,8 @@ access_install()
 
     = STRINGIZE(INSTALL) + std::string(1, folder_delimiter) + "tzdata";
 
+    #undef STRINGIZEIMP
+    #undef STRINGIZE
 #endif  // !INSTALL
 
     return install;

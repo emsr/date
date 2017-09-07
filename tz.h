@@ -128,13 +128,17 @@ static_assert(HAS_REMOTE_API == 0 ? AUTO_DOWNLOAD == 0 : true,
 #ifdef _WIN32
 #  ifdef DATE_BUILD_DLL
 #    define DATE_API __declspec(dllexport)
-#  elif defined(DATE_BUILD_LIB)
-#    define DATE_API
-#  else
+#  elif defined(DATE_USE_DLL)
 #    define DATE_API __declspec(dllimport)
+#  else
+#    define DATE_API
 #  endif
 #else
-#  define DATE_API
+#  ifdef DATE_BUILD_DLL
+#    define DATE_API __attribute__ ((visibility ("default")))
+#  else
+#    define DATE_API
+#  endif
 #endif
 
 namespace date
@@ -359,11 +363,16 @@ private:
     sys_time<duration> tp_;
 
 public:
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = decltype(zoned_traits<T>::default_zone())>
+#endif
         zoned_time();
+
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = decltype(zoned_traits<T>::default_zone())>
+#endif
         zoned_time(const sys_time<Duration>& st);
     explicit zoned_time(TimeZonePtr z);
 
@@ -379,6 +388,7 @@ public:
               >::type>
         explicit zoned_time(std::string_view name);
 #else
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -388,6 +398,7 @@ public:
                       decltype(zoned_traits<T>::locate_zone(std::string()))
                   >::value
               >::type>
+#endif
         explicit zoned_time(const std::string& name);
 #endif
 
@@ -493,6 +504,7 @@ public:
 
 #else  // !HAS_STRING_VIEW
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -503,8 +515,10 @@ public:
                       sys_time<Duration>
                   >::value
               >::type>
+#endif
         zoned_time(const std::string& name, const sys_time<Duration>& st);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -515,8 +529,10 @@ public:
                       sys_time<Duration>
                   >::value
               >::type>
+#endif
         zoned_time(const char* name, const sys_time<Duration>& st);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -527,8 +543,10 @@ public:
                       local_time<Duration>
                   >::value
               >::type>
+#endif
         zoned_time(const std::string& name, const local_time<Duration>& tp);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -539,8 +557,10 @@ public:
                       local_time<Duration>
                   >::value
               >::type>
+#endif
         zoned_time(const char* name, const local_time<Duration>& tp);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -552,8 +572,10 @@ public:
                       choose
                   >::value
               >::type>
+#endif
         zoned_time(const std::string& name, const local_time<Duration>& tp, choose c);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -565,8 +587,10 @@ public:
                       choose
                   >::value
               >::type>
+#endif
         zoned_time(const char* name, const local_time<Duration>& tp, choose c);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -577,8 +601,10 @@ public:
                       zoned_time
                   >::value
               >::type>
+#endif
         zoned_time(const std::string& name, const zoned_time& zt);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -589,8 +615,10 @@ public:
                       zoned_time
                   >::value
               >::type>
+#endif
         zoned_time(const char* name, const zoned_time& zt);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -602,8 +630,10 @@ public:
                       choose
                   >::value
               >::type>
+#endif
         zoned_time(const std::string& name, const zoned_time& zt, choose);
 
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -615,6 +645,7 @@ public:
                       choose
                   >::value
               >::type>
+#endif
         zoned_time(const char* name, const zoned_time& zt, choose);
 
 #endif  // !HAS_STRING_VIEW
@@ -1195,6 +1226,7 @@ public:
     tzdb_list(tzdb_list&& x) noexcept;
 
     const TZ_DB& front() const noexcept {return *head_;}
+          TZ_DB& front()       noexcept {return *head_;}
 
     class const_iterator;
 
@@ -1314,14 +1346,18 @@ to_raw_pointer(Pointer p) noexcept
 }  // namespace detail
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time()
     : zone_(zoned_traits<TimeZonePtr>::default_zone())
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const sys_time<Duration>& st)
     : zone_(zoned_traits<TimeZonePtr>::default_zone())
@@ -1346,7 +1382,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name)
 #else  // !HAS_STRING_VIEW
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name)
     : zoned_time(zoned_traits<TimeZonePtr>::locate_zone(name))
@@ -1445,7 +1483,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name,
 #else  // !HAS_STRING_VIEW
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
                                               const sys_time<Duration>& st)
@@ -1453,7 +1493,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name,
                                               const sys_time<Duration>& st)
@@ -1461,7 +1503,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
                                               const local_time<Duration>& t)
@@ -1469,7 +1513,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name,
                                               const local_time<Duration>& t)
@@ -1477,7 +1523,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
                                               const local_time<Duration>& t, choose c)
@@ -1485,7 +1533,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name,
                                               const local_time<Duration>& t, choose c)
@@ -1493,7 +1543,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
                                               const zoned_time& zt)
@@ -1501,14 +1553,18 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name, const zoned_time& zt)
     : zoned_time(zoned_traits<TimeZonePtr>::locate_zone(name), zt)
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
                                               const zoned_time& zt, choose c)
@@ -1516,7 +1572,9 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(const std::string& name,
     {}
 
 template <class Duration, class TimeZonePtr>
+#if !defined(_MSC_VER) || (_MSC_VER > 1911)
 template <class, class>
+#endif
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(const char* name,
                                               const zoned_time& zt, choose c)
@@ -1545,14 +1603,14 @@ zoned_time<Duration, TimeZonePtr>::operator=(const local_time<Duration>& ut)
 
 template <class Duration, class TimeZonePtr>
 inline
-zoned_time<Duration, TimeZonePtr>::operator local_time<zoned_time::duration>() const
+zoned_time<Duration, TimeZonePtr>::operator local_time<typename zoned_time<Duration, TimeZonePtr>::duration>() const
 {
     return get_local_time();
 }
 
 template <class Duration, class TimeZonePtr>
 inline
-zoned_time<Duration, TimeZonePtr>::operator sys_time<zoned_time::duration>() const
+zoned_time<Duration, TimeZonePtr>::operator sys_time<typename zoned_time<Duration, TimeZonePtr>::duration>() const
 {
     return get_sys_time();
 }
@@ -1595,7 +1653,7 @@ inline
 zoned_time<std::chrono::seconds>
 make_zoned()
 {
-    return {};
+    return zoned_time<std::chrono::seconds>();
 }
 
 template <class Duration>
@@ -1603,7 +1661,7 @@ inline
 zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type>
 make_zoned(const sys_time<Duration>& tp)
 {
-    return {tp};
+    return zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type>(tp);
 }
 
 template <class TimeZonePtr,
@@ -1622,14 +1680,14 @@ inline
 zoned_time<std::chrono::seconds, TimeZonePtr>
 make_zoned(TimeZonePtr z)
 {
-    return zoned_time<std::chrono::seconds, TimeZonePtr>{std::move(z)};
+    return zoned_time<std::chrono::seconds, TimeZonePtr>(std::move(z));
 }
 
 inline
 zoned_seconds
 make_zoned(const std::string& name)
 {
-    return zoned_seconds{name};
+    return zoned_seconds(name);
 }
 
 template <class Duration, class TimeZonePtr,
@@ -1642,7 +1700,8 @@ inline
 zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type, TimeZonePtr>
 make_zoned(TimeZonePtr zone, const local_time<Duration>& tp)
 {
-    return {std::move(zone), tp};
+    return zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type,
+                      TimeZonePtr>(std::move(zone), tp);
 }
 
 template <class Duration, class TimeZonePtr,
@@ -1655,7 +1714,8 @@ inline
 zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type, TimeZonePtr>
 make_zoned(TimeZonePtr zone, const local_time<Duration>& tp, choose c)
 {
-    return {std::move(zone), tp, c};
+    return zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type,
+                      TimeZonePtr>(std::move(zone), tp, c);
 }
 
 template <class Duration>
@@ -1663,7 +1723,8 @@ inline
 zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type>
 make_zoned(const std::string& name, const local_time<Duration>& tp)
 {
-    return {name, tp};
+    return zoned_time<typename std::common_type<Duration,
+                      std::chrono::seconds>::type>(name, tp);
 }
 
 template <class Duration>
@@ -1671,7 +1732,8 @@ inline
 zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type>
 make_zoned(const std::string& name, const local_time<Duration>& tp, choose c)
 {
-    return {name, tp, c};
+    return zoned_time<typename std::common_type<Duration,
+                      std::chrono::seconds>::type>(name, tp, c);
 }
 
 template <class Duration, class TimeZonePtr>
@@ -1679,7 +1741,7 @@ inline
 zoned_time<Duration, TimeZonePtr>
 make_zoned(TimeZonePtr zone, const zoned_time<Duration, TimeZonePtr>& zt)
 {
-    return {std::move(zone), zt};
+    return zoned_time<Duration, TimeZonePtr>(std::move(zone), zt);
 }
 
 template <class Duration, class TimeZonePtr>
@@ -1687,7 +1749,7 @@ inline
 zoned_time<Duration, TimeZonePtr>
 make_zoned(const std::string& name, const zoned_time<Duration, TimeZonePtr>& zt)
 {
-    return {name, zt};
+    return zoned_time<Duration, TimeZonePtr>(name, zt);
 }
 
 template <class Duration, class TimeZonePtr>
@@ -1695,7 +1757,7 @@ inline
 zoned_time<Duration, TimeZonePtr>
 make_zoned(TimeZonePtr zone, const zoned_time<Duration, TimeZonePtr>& zt, choose c)
 {
-    return {std::move(zone), zt, c};
+    return zoned_time<Duration, TimeZonePtr>(std::move(zone), zt, c);
 }
 
 template <class Duration, class TimeZonePtr>
@@ -1703,7 +1765,7 @@ inline
 zoned_time<Duration, TimeZonePtr>
 make_zoned(const std::string& name, const zoned_time<Duration, TimeZonePtr>& zt, choose c)
 {
-    return {name, zt, c};
+    return zoned_time<Duration, TimeZonePtr>(name, zt, c);
 }
 
 template <class Duration, class TimeZonePtr,
@@ -1716,7 +1778,8 @@ inline
 zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type, TimeZonePtr>
 make_zoned(TimeZonePtr zone, const sys_time<Duration>& st)
 {
-    return {std::move(zone), st};
+    return zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type,
+                      TimeZonePtr>(std::move(zone), st);
 }
 
 template <class Duration>
@@ -1724,7 +1787,8 @@ inline
 zoned_time<typename std::common_type<Duration, std::chrono::seconds>::type>
 make_zoned(const std::string& name, const sys_time<Duration>& st)
 {
-    return {name, st};
+    return zoned_time<typename std::common_type<Duration,
+                      std::chrono::seconds>::type>(name, st);
 }
 
 template <class CharT, class Traits, class Duration, class TimeZonePtr>
