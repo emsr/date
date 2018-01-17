@@ -30,8 +30,15 @@
 // been invented (that would involve another several millennia of evolution).
 // We did not mean to shout.
 
-#include <cassert>
+#ifndef HAS_STRING_VIEW
+#  if __cplusplus >= 201703
+#    define HAS_STRING_VIEW 1
+#  else
+#    define HAS_STRING_VIEW 0
+#  endif
+#endif  // HAS_STRING_VIEW
 
+#include <cassert>
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -48,11 +55,15 @@
 #include <iterator>
 #include <limits>
 #include <locale>
+#include <memory>
 #include <ostream>
 #include <ratio>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#if HAS_STRING_VIEW
+# include <string_view>
+#endif
 #include <utility>
 #include <type_traits>
 
@@ -1098,7 +1109,7 @@ trunc(const std::chrono::duration<Rep, Period>& d)
 }
 
 #ifndef HAS_CHRONO_ROUNDING
-#  if defined(_MSC_FULL_VER) && _MSC_FULL_VER >= 190023918
+#  if defined(_MSC_FULL_VER) && (_MSC_FULL_VER >= 190023918 || (_MSC_FULL_VER >= 190000000 && defined (__clang__)))
 #    define HAS_CHRONO_ROUNDING 1
 #  elif defined(__cpp_lib_chrono) && __cplusplus > 201402 && __cpp_lib_chrono >= 201510
 #    define HAS_CHRONO_ROUNDING 1
@@ -1867,12 +1878,21 @@ weekday_indexed::ok() const NOEXCEPT
     return weekday().ok() && 1 <= index_ && index_ <= 5;
 }
 
+#ifdef __GNUC__
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wconversion"
+#endif  // __GNUC__
+
 CONSTCD11
 inline
 weekday_indexed::weekday_indexed(const date::weekday& wd, unsigned index) NOEXCEPT
     : wd_(static_cast<decltype(wd_)>(static_cast<unsigned>(wd)))
     , index_(static_cast<decltype(index_)>(index))
     {}
+
+#ifdef __GNUC__
+#  pragma GCC diagnostic pop
+#endif  // __GNUC__
 
 template<class CharT, class Traits>
 inline
@@ -6755,7 +6775,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
                     else
                         read(is, rs{H, 1, 2}, CharT{':'}, ru{M, 2, 2});
                     if (!is.fail())
-                        temp_offset = hours{H} + minutes{M};
+                        temp_offset = hours{ H } + minutes{ H < 0 ? -M : M };
                     command = nullptr;
                     width = -1;
                     modified = CharT{};
@@ -6977,6 +6997,8 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
                 else if (day(static_cast<unsigned>(d)) != ymd.day())
                     goto broken;
             }
+            if (Y < static_cast<int>(year::min()) || Y > static_cast<int>(year::max()))
+                Y = not_a_year;
             auto ymd = year{Y}/m/d;
             if (wd != not_a_weekday && ymd.ok())
             {

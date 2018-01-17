@@ -1,10 +1,6 @@
-//
-//  ios.h
-//  DateTimeLib
-//
 // The MIT License (MIT)
 //
-// Copyright (c) 2016 Alexander Kormanovsky
+// Copyright (c) 2017 Tomasz Kamiński
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -24,27 +20,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef ios_hpp
-#define ios_hpp
+#include "tz.h"
 
-#if __APPLE__
-# include <TargetConditionals.h>
-# if TARGET_OS_IPHONE
-#   include <string>
+struct bad_clock
+{
+  using duration = std::chrono::system_clock::duration;
+  using rep = duration::rep;
+  using period = duration::period;
+  using time_point = std::chrono::time_point<bad_clock, duration>;
 
-    namespace date
-    {
-    namespace iOSUtils
-    {
-    
-    std::string get_tzdata_path();
-    std::string get_current_timezone();
-    
-    }  // namespace iOSUtils
-    }  // namespace date
+  template<typename Duration>
+  static
+  date::utc_time<Duration>
+  to_sys(std::chrono::time_point<bad_clock, Duration> const& tp)
+  {
+    return utc_time<Duration>(tp.time_since_epoch());
+  }
+};
 
-# endif  // TARGET_OS_IPHONE
-#else   // !__APPLE__
-# define TARGET_OS_IPHONE 0
-#endif  // !__APPLE__
-#endif // ios_hpp
+int
+main()
+{
+    using namespace date;
+    using sys_clock = std::chrono::system_clock;
+
+    auto bt = bad_clock::time_point();
+    clock_cast<sys_clock>(bt);
+}
