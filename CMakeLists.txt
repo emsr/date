@@ -1,12 +1,17 @@
-cmake_minimum_required( VERSION 3.0.2 )
+cmake_minimum_required( VERSION 3.1.0 )
 
 project( date_prj )
 
+include( GNUInstallDirs )
+
 find_package( Threads REQUIRED )
+
+# Override by setting on CMake command line.
+set( CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard whose features are requested.")
 
 option( USE_SYSTEM_TZ_DB "Use the operating system's timezone database" OFF )
 option( USE_TZ_DB_IN_DOT "Save the timezone database in the current folder" OFF )
-option( BUILD_TZ_STATIC  "Build a static version of library" ON )
+option( BUILD_SHARED_LIBS  "Build a shared version of library" OFF )
 option( ENABLE_DATE_TESTING "Enable unit tests" ON )
 
 function( print_option OPT )
@@ -19,7 +24,7 @@ endfunction( )
 
 print_option( USE_SYSTEM_TZ_DB )
 print_option( USE_TZ_DB_IN_DOT )
-print_option( BUILD_TZ_STATIC  )
+print_option( BUILD_SHARED_LIBS  )
 print_option( ENABLE_DATE_TESTING )
 
 set( HEADER_FOLDER "include" )
@@ -38,23 +43,19 @@ set( HEADER_FILES
 	${HEADER_FOLDER}/date/tz_private.h
 )
 
-if( BUILD_TZ_STATIC )
-	add_library( tz STATIC ${HEADER_FILES} ${SOURCE_FOLDER}/tz.cpp )
-else( )
-	add_library( tz SHARED ${HEADER_FILES} ${SOURCE_FOLDER}/tz.cpp )
-endif( )
+add_library( tz ${HEADER_FILES} ${SOURCE_FOLDER}/tz.cpp )
 
 if( USE_SYSTEM_TZ_DB )
 	target_compile_definitions( tz PRIVATE -DUSE_AUTOLOAD=0 )
 	target_compile_definitions( tz PRIVATE -DHAS_REMOTE_API=0 )
 	# cannot set USE_OS_TZDB to 1 on Windows
 	if( NOT WIN32 )
-		target_compile_definitions( tz PRIVATE -DUSE_OS_TZDB=1 )
+		target_compile_definitions( tz PUBLIC -DUSE_OS_TZDB=1 )
 	endif( )
 else( )
 	target_compile_definitions( tz PRIVATE -DUSE_AUTOLOAD=1 )
 	target_compile_definitions( tz PRIVATE -DHAS_REMOTE_API=1 )
-	target_compile_definitions( tz PRIVATE -DUSE_OS_TZDB=0 )
+	target_compile_definitions( tz PUBLIC -DUSE_OS_TZDB=0 )
 	find_package( CURL REQUIRED )
 	include_directories( SYSTEM ${CURL_INCLUDE_DIRS} )
 	set( OPTIONAL_LIBRARIES ${CURL_LIBRARIES} )
@@ -64,11 +65,6 @@ if( USE_TZ_DB_IN_DOT )
 	target_compile_definitions( tz PRIVATE -DINSTALL=. )
 endif( )
 
-if( NOT TZ_CXX_STANDARD ) 
-    set( TZ_CXX_STANDARD 17 )
-endif( )
-
-set_property(TARGET tz PROPERTY CXX_STANDARD ${TZ_CXX_STANDARD})
 target_link_libraries( tz ${CMAKE_THREAD_LIBS_INIT} ${OPTIONAL_LIBRARIES} )
 
 # add include folders to the library and targets that consume it
@@ -92,12 +88,15 @@ target_include_directories(date_interface INTERFACE
 if(WIN32 AND NOT CYGWIN)
     set(DEF_INSTALL_CMAKE_DIR CMake)
 else()
-    set(DEF_INSTALL_CMAKE_DIR lib/cmake/date)
+    set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/date)
 endif()
 
-install( TARGETS date_interface EXPORT DateConfig )
-install( EXPORT DateConfig DESTINATION ${DEF_INSTALL_CMAKE_DIR} )
-install( TARGETS tz DESTINATION lib )
+install( TARGETS date_interface EXPORT dateConfig )
+install( EXPORT dateConfig DESTINATION ${DEF_INSTALL_CMAKE_DIR} )
+install( TARGETS tz
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})  # This is for Windows
 install( DIRECTORY ${HEADER_FOLDER}/ DESTINATION include/ )
 
 if ( ENABLE_DATE_TESTING )
@@ -119,7 +118,6 @@ if ( ENABLE_DATE_TESTING )
                 set( BIN_NAME ${PREFIX}_bin )
                 set( TST_NAME ${PREFIX}_test )
                 add_executable( ${BIN_NAME} EXCLUDE_FROM_ALL ${TEST_FILE} )
-                set_property(TARGET ${BIN_NAME} PROPERTY CXX_STANDARD ${TZ_CXX_STANDARD})
                 add_test( ${TST_NAME} ${BIN_NAME} )
                 target_link_libraries( ${BIN_NAME} tz )
                 add_dependencies( testit ${BIN_NAME} )
