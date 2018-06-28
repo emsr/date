@@ -4,7 +4,7 @@
 
 ---
 
-**[Try it out on wandbox!](https://wandbox.org/permlink/vqwMyTphHJv5iXX7)**
+**[Try it out on wandbox!](https://wandbox.org/permlink/L8MwjzSSC3fXXrMd)**
 
 ## Summary
 

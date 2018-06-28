@@ -90,20 +90,19 @@ namespace date
 
 #if defined(_MSC_VER) && (!defined(__clang__) || (_MSC_VER < 1910))
 // MSVC
+#  define _SILENCE_CXX17_UNCAUGHT_EXCEPTION_DEPRECATION_WARNING
 #  if _MSC_VER < 1910
 //   before VS2017
 #    define CONSTDATA const
 #    define CONSTCD11
 #    define CONSTCD14
 #    define NOEXCEPT _NOEXCEPT
-#    define NOEXCEPT_COND(...)
 #  else
 //   VS2017 and later
 #    define CONSTDATA constexpr const
 #    define CONSTCD11 constexpr
 #    define CONSTCD14 constexpr
 #    define NOEXCEPT noexcept
-#    define NOEXCEPT_COND(...) noexcept(__VA_ARGS__)
 #  endif
 
 #elif defined(__SUNPRO_CC) && __SUNPRO_CC <= 0x5150
@@ -112,7 +111,6 @@ namespace date
 #  define CONSTCD11 constexpr
 #  define CONSTCD14
 #  define NOEXCEPT noexcept
-#  define NOEXCEPT_COND(...) noexcept(__VA_ARGS__)
 
 #elif __cplusplus >= 201402
 // C++14
@@ -120,14 +118,12 @@ namespace date
 #  define CONSTCD11 constexpr
 #  define CONSTCD14 constexpr
 #  define NOEXCEPT noexcept
-#  define NOEXCEPT_COND(...) noexcept(__VA_ARGS__)
 #else
 // C++11
 #  define CONSTDATA constexpr const
 #  define CONSTCD11 constexpr
 #  define CONSTCD14
 #  define NOEXCEPT noexcept
-#  define NOEXCEPT_COND(...) noexcept(__VA_ARGS__)
 #endif
 
 #ifndef HAS_VOID_T
@@ -431,7 +427,6 @@ public:
     CONSTCD14 weekday& operator+=(const days& d) NOEXCEPT;
     CONSTCD14 weekday& operator-=(const days& d) NOEXCEPT;
 
-    CONSTCD11 explicit operator unsigned() const NOEXCEPT;
     CONSTCD11 bool ok() const NOEXCEPT;
 
     CONSTCD11 weekday_indexed operator[](unsigned index) const NOEXCEPT;
@@ -439,6 +434,14 @@ public:
 
 private:
     static CONSTCD11 unsigned char weekday_from_days(int z) NOEXCEPT;
+
+    friend CONSTCD11 bool operator==(const weekday& x, const weekday& y) NOEXCEPT;
+    friend CONSTCD14 days operator-(const weekday& x, const weekday& y) NOEXCEPT;
+    friend CONSTCD14 weekday operator+(const weekday& x, const days& y) NOEXCEPT;
+    template<class CharT, class Traits>
+        friend std::basic_ostream<CharT, Traits>&
+            operator<<(std::basic_ostream<CharT, Traits>& os, const weekday& wd);
+    friend class weekday_indexed;
 };
 
 CONSTCD11 bool operator==(const weekday& x, const weekday& y) NOEXCEPT;
@@ -496,10 +499,12 @@ template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>&
 operator<<(std::basic_ostream<CharT, Traits>& os, const weekday_last& wdl);
 
-#define NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS                                  \
-  NOEXCEPT_COND(std::is_nothrow_constructible<years, Duration const&>::value     \
-                || (!std::is_convertible<Duration const&, years>::value          \
-                && std::is_nothrow_constructible<months, Duration const&>::value))
+namespace detail
+{
+
+struct unspecified_month_disambiguator {};
+
+}  // namespace detail
 
 // year_month
 
@@ -515,19 +520,12 @@ public:
     CONSTCD11 date::year  year()  const NOEXCEPT;
     CONSTCD11 date::month month() const NOEXCEPT;
 
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month& operator+=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
-
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month& operator-=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month& operator+=(const months& dm) NOEXCEPT;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month& operator-=(const months& dm) NOEXCEPT;
+    CONSTCD14 year_month& operator+=(const years& dy) NOEXCEPT;
+    CONSTCD14 year_month& operator-=(const years& dy) NOEXCEPT;
 
     CONSTCD11 bool ok() const NOEXCEPT;
 };
@@ -539,32 +537,17 @@ CONSTCD11 bool operator> (const year_month& x, const year_month& y) NOEXCEPT;
 CONSTCD11 bool operator<=(const year_month& x, const year_month& y) NOEXCEPT;
 CONSTCD11 bool operator>=(const year_month& x, const year_month& y) NOEXCEPT;
 
+template<class = detail::unspecified_month_disambiguator>
 CONSTCD14 year_month operator+(const year_month& ym, const months& dm) NOEXCEPT;
+template<class = detail::unspecified_month_disambiguator>
 CONSTCD14 year_month operator+(const months& dm, const year_month& ym) NOEXCEPT;
+template<class = detail::unspecified_month_disambiguator>
 CONSTCD14 year_month operator-(const year_month& ym, const months& dm) NOEXCEPT;
 
 CONSTCD11 months operator-(const year_month& x, const year_month& y) NOEXCEPT;
-
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, years>::value
-          >::type>
-CONSTCD11 year_month operator+(const year_month& ym, const Duration& d)
-NOEXCEPT_COND(std::is_nothrow_constructible<years, Duration const&>::value);
-
-template <class Duration,
-          class = typename std::enable_if<
-           std::is_convertible<Duration const&, years>::value
-          >::type>
-CONSTCD11 year_month operator+(const Duration& d, const year_month& ym)
-NOEXCEPT_COND(std::is_nothrow_constructible<years, Duration const&>::value);
-
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, years>::value
-          >::type>
-CONSTCD11 year_month operator-(const year_month& ym, const Duration& d)
-NOEXCEPT_COND(std::is_nothrow_constructible<years, Duration const&>::value);
+CONSTCD11 year_month operator+(const year_month& ym, const years& dy) NOEXCEPT;
+CONSTCD11 year_month operator+(const years& dy, const year_month& ym) NOEXCEPT;
+CONSTCD11 year_month operator-(const year_month& ym, const years& dy) NOEXCEPT;
 
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>&
@@ -688,19 +671,12 @@ public:
     CONSTCD14 year_month_day(sys_days dp) NOEXCEPT;
     CONSTCD14 explicit year_month_day(local_days dp) NOEXCEPT;
 
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_day& operator+=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
-
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_day& operator-=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_day& operator+=(const months& m) NOEXCEPT;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_day& operator-=(const months& m) NOEXCEPT;
+    CONSTCD14 year_month_day& operator+=(const years& y)  NOEXCEPT;
+    CONSTCD14 year_month_day& operator-=(const years& y)  NOEXCEPT;
 
     CONSTCD11 date::year  year()  const NOEXCEPT;
     CONSTCD11 date::month month() const NOEXCEPT;
@@ -722,29 +698,15 @@ CONSTCD11 bool operator> (const year_month_day& x, const year_month_day& y) NOEX
 CONSTCD11 bool operator<=(const year_month_day& x, const year_month_day& y) NOEXCEPT;
 CONSTCD11 bool operator>=(const year_month_day& x, const year_month_day& y) NOEXCEPT;
 
-
-CONSTCD11 year_month operator/(const year& y, const month& m) NOEXCEPT;
-
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11 year_month_day operator+(const year_month_day& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
-
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11 year_month_day operator+(const Duration& d, const year_month_day& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
-
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11 year_month_day operator-(const year_month_day& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14 year_month_day operator+(const year_month_day& ymd, const months& dm) NOEXCEPT;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14 year_month_day operator+(const months& dm, const year_month_day& ymd) NOEXCEPT;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14 year_month_day operator-(const year_month_day& ymd, const months& dm) NOEXCEPT;
+CONSTCD11 year_month_day operator+(const year_month_day& ymd, const years& dy)  NOEXCEPT;
+CONSTCD11 year_month_day operator+(const years& dy, const year_month_day& ymd)  NOEXCEPT;
+CONSTCD11 year_month_day operator-(const year_month_day& ymd, const years& dy)  NOEXCEPT;
 
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>&
@@ -761,19 +723,12 @@ public:
     CONSTCD11 year_month_day_last(const date::year& y,
                                   const date::month_day_last& mdl) NOEXCEPT;
 
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_day_last& operator+=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
-
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_day_last& operator-=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_day_last& operator+=(const months& m) NOEXCEPT;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_day_last& operator-=(const months& m) NOEXCEPT;
+    CONSTCD14 year_month_day_last& operator+=(const years& y)  NOEXCEPT;
+    CONSTCD14 year_month_day_last& operator-=(const years& y)  NOEXCEPT;
 
     CONSTCD11 date::year           year()           const NOEXCEPT;
     CONSTCD11 date::month          month()          const NOEXCEPT;
@@ -798,29 +753,32 @@ CONSTCD11
 CONSTCD11
     bool operator>=(const year_month_day_last& x, const year_month_day_last& y) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11
-    year_month_day_last operator+(const year_month_day_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_day_last
+operator+(const year_month_day_last& ymdl, const months& dm) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11
-    year_month_day_last operator+(const Duration& d, const year_month_day_last& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_day_last
+operator+(const months& dm, const year_month_day_last& ymdl) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
 CONSTCD11
-    year_month_day_last operator-(const year_month_day_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+year_month_day_last
+operator+(const year_month_day_last& ymdl, const years& dy) NOEXCEPT;
+
+CONSTCD11
+year_month_day_last
+operator+(const years& dy, const year_month_day_last& ymdl) NOEXCEPT;
+
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_day_last
+operator-(const year_month_day_last& ymdl, const months& dm) NOEXCEPT;
+
+CONSTCD11
+year_month_day_last
+operator-(const year_month_day_last& ymdl, const years& dy) NOEXCEPT;
 
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>&
@@ -841,19 +799,12 @@ public:
     CONSTCD14 year_month_weekday(const sys_days& dp) NOEXCEPT;
     CONSTCD14 explicit year_month_weekday(const local_days& dp) NOEXCEPT;
 
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_weekday& operator+=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
-
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_weekday& operator-=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_weekday& operator+=(const months& m) NOEXCEPT;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_weekday& operator-=(const months& m) NOEXCEPT;
+    CONSTCD14 year_month_weekday& operator+=(const years& y)  NOEXCEPT;
+    CONSTCD14 year_month_weekday& operator-=(const years& y)  NOEXCEPT;
 
     CONSTCD11 date::year year() const NOEXCEPT;
     CONSTCD11 date::month month() const NOEXCEPT;
@@ -875,26 +826,32 @@ CONSTCD11
 CONSTCD11
     bool operator!=(const year_month_weekday& x, const year_month_weekday& y) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11 year_month_weekday operator+(const year_month_weekday& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_weekday
+operator+(const year_month_weekday& ymwd, const months& dm) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11 year_month_weekday operator+(const Duration& d, const year_month_weekday& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_weekday
+operator+(const months& dm, const year_month_weekday& ymwd) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11 year_month_weekday operator-(const year_month_weekday& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+CONSTCD11
+year_month_weekday
+operator+(const year_month_weekday& ymwd, const years& dy) NOEXCEPT;
+
+CONSTCD11
+year_month_weekday
+operator+(const years& dy, const year_month_weekday& ymwd) NOEXCEPT;
+
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_weekday
+operator-(const year_month_weekday& ymwd, const months& dm) NOEXCEPT;
+
+CONSTCD11
+year_month_weekday
+operator-(const year_month_weekday& ymwd, const years& dy) NOEXCEPT;
 
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>&
@@ -912,19 +869,12 @@ public:
     CONSTCD11 year_month_weekday_last(const date::year& y, const date::month& m,
                                       const date::weekday_last& wdl) NOEXCEPT;
 
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_weekday_last& operator+=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
-
-    template <class Duration,
-              class = typename std::enable_if<
-                std::is_convertible<Duration const&, months>::value
-              >::type>
-    CONSTCD14 year_month_weekday_last& operator-=(const Duration& d)
-    NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_weekday_last& operator+=(const months& m) NOEXCEPT;
+    template<class = detail::unspecified_month_disambiguator>
+    CONSTCD14 year_month_weekday_last& operator-=(const months& m) NOEXCEPT;
+    CONSTCD14 year_month_weekday_last& operator+=(const years& y) NOEXCEPT;
+    CONSTCD14 year_month_weekday_last& operator-=(const years& y) NOEXCEPT;
 
     CONSTCD11 date::year year() const NOEXCEPT;
     CONSTCD11 date::month month() const NOEXCEPT;
@@ -947,29 +897,32 @@ CONSTCD11
 bool
 operator!=(const year_month_weekday_last& x, const year_month_weekday_last& y) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11
-    year_month_weekday_last operator+(const year_month_weekday_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_weekday_last
+operator+(const year_month_weekday_last& ymwdl, const months& dm) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
-CONSTCD11
-    year_month_weekday_last operator+(const Duration& d, const year_month_weekday_last& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_weekday_last
+operator+(const months& dm, const year_month_weekday_last& ymwdl) NOEXCEPT;
 
-template <class Duration,
-          class = typename std::enable_if<
-            std::is_convertible<Duration const&, months>::value
-          >::type>
 CONSTCD11
-    year_month_weekday_last operator-(const year_month_weekday_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS;
+year_month_weekday_last
+operator+(const year_month_weekday_last& ymwdl, const years& dy) NOEXCEPT;
+
+CONSTCD11
+year_month_weekday_last
+operator+(const years& dy, const year_month_weekday_last& ymwdl) NOEXCEPT;
+
+template<class = detail::unspecified_month_disambiguator>
+CONSTCD14
+year_month_weekday_last
+operator-(const year_month_weekday_last& ymwdl, const months& dm) NOEXCEPT;
+
+CONSTCD11
+year_month_weekday_last
+operator-(const year_month_weekday_last& ymwdl, const years& dy) NOEXCEPT;
 
 template<class CharT, class Traits>
 std::basic_ostream<CharT, Traits>&
@@ -982,29 +935,29 @@ inline namespace literals
 CONSTCD11 date::day  operator "" _d(unsigned long long d) NOEXCEPT;
 CONSTCD11 date::year operator "" _y(unsigned long long y) NOEXCEPT;
 
-// CONSTDATA date::month jan{1};
-// CONSTDATA date::month feb{2};
-// CONSTDATA date::month mar{3};
-// CONSTDATA date::month apr{4};
-// CONSTDATA date::month may{5};
-// CONSTDATA date::month jun{6};
-// CONSTDATA date::month jul{7};
-// CONSTDATA date::month aug{8};
-// CONSTDATA date::month sep{9};
-// CONSTDATA date::month oct{10};
-// CONSTDATA date::month nov{11};
-// CONSTDATA date::month dec{12};
-//
-// CONSTDATA date::weekday sun{0u};
-// CONSTDATA date::weekday mon{1u};
-// CONSTDATA date::weekday tue{2u};
-// CONSTDATA date::weekday wed{3u};
-// CONSTDATA date::weekday thu{4u};
-// CONSTDATA date::weekday fri{5u};
-// CONSTDATA date::weekday sat{6u};
-
 }  // inline namespace literals
 #endif // !defined(_MSC_VER) || (_MSC_VER >= 1900)
+
+// CONSTDATA date::month January{1};
+// CONSTDATA date::month February{2};
+// CONSTDATA date::month March{3};
+// CONSTDATA date::month April{4};
+// CONSTDATA date::month May{5};
+// CONSTDATA date::month June{6};
+// CONSTDATA date::month July{7};
+// CONSTDATA date::month August{8};
+// CONSTDATA date::month September{9};
+// CONSTDATA date::month October{10};
+// CONSTDATA date::month November{11};
+// CONSTDATA date::month December{12};
+//
+// CONSTDATA date::weekday Sunday{0u};
+// CONSTDATA date::weekday Monday{1u};
+// CONSTDATA date::weekday Tuesday{2u};
+// CONSTDATA date::weekday Wednesday{3u};
+// CONSTDATA date::weekday Thursday{4u};
+// CONSTDATA date::weekday Friday{5u};
+// CONSTDATA date::weekday Saturday{6u};
 
 #if HAS_VOID_T
 
@@ -1073,7 +1026,12 @@ class save_ostream
 public:
     ~save_ostream()
     {
-        if ((this->flags_ & std::ios::unitbuf) && !std::uncaught_exception() &&
+        if ((this->flags_ & std::ios::unitbuf) &&
+#if __cplusplus >= 201703
+                std::uncaught_exceptions() == 0 &&
+#else
+                !std::uncaught_exception() &&
+#endif
                 this->is_.good())
             this->is_.rdbuf()->pubsync();
     }
@@ -1765,7 +1723,7 @@ weekday::weekday_from_days(int z) NOEXCEPT
 CONSTCD11
 inline
 weekday::weekday(unsigned wd) NOEXCEPT
-    : wd_(static_cast<decltype(wd_)>(wd))
+    : wd_(static_cast<decltype(wd_)>(wd != 7 ? wd : 0))
     {}
 
 CONSTCD11
@@ -1803,13 +1761,6 @@ weekday::operator-=(const days& d) NOEXCEPT
     return *this;
 }
 
-CONSTCD11
-inline
-weekday::operator unsigned() const NOEXCEPT
-{
-    return static_cast<unsigned>(wd_);
-}
-
 CONSTCD11 inline bool weekday::ok() const NOEXCEPT {return wd_ <= 6;}
 
 CONSTCD11
@@ -1817,7 +1768,7 @@ inline
 bool
 operator==(const weekday& x, const weekday& y) NOEXCEPT
 {
-    return static_cast<unsigned>(x) == static_cast<unsigned>(y);
+    return x.wd_ == y.wd_;
 }
 
 CONSTCD11
@@ -1833,8 +1784,9 @@ inline
 days
 operator-(const weekday& x, const weekday& y) NOEXCEPT
 {
-    auto const diff = static_cast<unsigned>(x) - static_cast<unsigned>(y);
-    return days{diff <= 6 ? diff : diff + 7};
+    auto const wdu = x.wd_ - y.wd_;
+    auto const wk = (wdu >= 0 ? wdu : wdu-6) / 7;
+    return days{wdu - wk * 7};
 }
 
 CONSTCD14
@@ -1842,7 +1794,7 @@ inline
 weekday
 operator+(const weekday& x, const days& y) NOEXCEPT
 {
-    auto const wdu = static_cast<long long>(static_cast<unsigned>(x)) + y.count();
+    auto const wdu = static_cast<long long>(static_cast<unsigned>(x.wd_)) + y.count();
     auto const wk = (wdu >= 0 ? wdu : wdu-6) / 7;
     return weekday{static_cast<unsigned>(wdu - wk * 7)};
 }
@@ -1874,7 +1826,7 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const weekday& wd)
         os << format(fmt, wd);
     }
     else
-        os << static_cast<unsigned>(wd) << " is not a valid weekday";
+        os << static_cast<unsigned>(wd.wd_) << " is not a valid weekday";
     return os;
 }
 
@@ -1939,13 +1891,13 @@ CONSTDATA date::month October{10};
 CONSTDATA date::month November{11};
 CONSTDATA date::month December{12};
 
-CONSTDATA date::weekday Sunday{0u};
-CONSTDATA date::weekday Monday{1u};
-CONSTDATA date::weekday Tuesday{2u};
-CONSTDATA date::weekday Wednesday{3u};
-CONSTDATA date::weekday Thursday{4u};
-CONSTDATA date::weekday Friday{5u};
-CONSTDATA date::weekday Saturday{6u};
+CONSTDATA date::weekday Monday{1};
+CONSTDATA date::weekday Tuesday{2};
+CONSTDATA date::weekday Wednesday{3};
+CONSTDATA date::weekday Thursday{4};
+CONSTDATA date::weekday Friday{5};
+CONSTDATA date::weekday Saturday{6};
+CONSTDATA date::weekday Sunday{7};
 
 // weekday_indexed
 
@@ -1975,7 +1927,7 @@ weekday_indexed::ok() const NOEXCEPT
 CONSTCD11
 inline
 weekday_indexed::weekday_indexed(const date::weekday& wd, unsigned index) NOEXCEPT
-    : wd_(static_cast<decltype(wd_)>(static_cast<unsigned>(wd)))
+    : wd_(static_cast<decltype(wd_)>(static_cast<unsigned>(wd.wd_)))
     , index_(static_cast<decltype(index_)>(index))
     {}
 
@@ -2070,25 +2022,41 @@ CONSTCD11 inline year year_month::year() const NOEXCEPT {return y_;}
 CONSTCD11 inline month year_month::month() const NOEXCEPT {return m_;}
 CONSTCD11 inline bool year_month::ok() const NOEXCEPT {return y_.ok() && m_.ok();}
 
-template <class Duration, class>
+template<class>
 CONSTCD14
 inline
 year_month&
-year_month::operator+=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
+year_month::operator+=(const months& dm) NOEXCEPT
 {
-    *this = *this + d;
+    *this = *this + dm;
     return *this;
 }
 
-template <class Duration, class>
+template<class>
 CONSTCD14
 inline
 year_month&
-year_month::operator-=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
+year_month::operator-=(const months& dm) NOEXCEPT
 {
-    *this = *this - d;
+    *this = *this - dm;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month&
+year_month::operator+=(const years& dy) NOEXCEPT
+{
+    *this = *this + dy;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month&
+year_month::operator-=(const years& dy) NOEXCEPT
+{
+    *this = *this - dy;
     return *this;
 }
 
@@ -2142,6 +2110,7 @@ operator>=(const year_month& x, const year_month& y) NOEXCEPT
     return !(x < y);
 }
 
+template<class>
 CONSTCD14
 inline
 year_month
@@ -2153,6 +2122,7 @@ operator+(const year_month& ym, const months& dm) NOEXCEPT
     return (ym.year() + years(dy)) / month(static_cast<unsigned>(dmi));
 }
 
+template<class>
 CONSTCD14
 inline
 year_month
@@ -2161,6 +2131,7 @@ operator+(const months& dm, const year_month& ym) NOEXCEPT
     return ym + dm;
 }
 
+template<class>
 CONSTCD14
 inline
 year_month
@@ -2178,34 +2149,28 @@ operator-(const year_month& x, const year_month& y) NOEXCEPT
             months(static_cast<unsigned>(x.month()) - static_cast<unsigned>(y.month()));
 }
 
-template <class Duration, class>
 CONSTCD11
 inline
 year_month
-operator+(const year_month& ym, const Duration& d)
-NOEXCEPT_COND(std::is_nothrow_constructible<years, Duration const&>::value)
+operator+(const year_month& ym, const years& dy) NOEXCEPT
 {
-    return (ym.year() + years(d)) / ym.month();;
+    return (ym.year() + dy) / ym.month();
 }
 
-template <class Duration, class>
 CONSTCD11
 inline
 year_month
-operator+(const Duration& d, const year_month& ym)
-NOEXCEPT_COND(std::is_nothrow_constructible<years, Duration const&>::value)
+operator+(const years& dy, const year_month& ym) NOEXCEPT
 {
-    return ym + years(d);
+    return ym + dy;
 }
 
-template <class Duration, class>
 CONSTCD11
 inline
 year_month
-operator-(const year_month& ym, const Duration& d)
-NOEXCEPT_COND(std::is_nothrow_constructible<years, Duration const&>::value)
+operator-(const year_month& ym, const years& dy) NOEXCEPT
 {
-   return ym + -years(d);
+    return ym + -dy;
 }
 
 template<class CharT, class Traits>
@@ -2477,6 +2442,44 @@ year_month_day_last::year_month_day_last(const date::year& y,
     , mdl_(mdl)
     {}
 
+template<class>
+CONSTCD14
+inline
+year_month_day_last&
+year_month_day_last::operator+=(const months& m) NOEXCEPT
+{
+    *this = *this + m;
+    return *this;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_day_last&
+year_month_day_last::operator-=(const months& m) NOEXCEPT
+{
+    *this = *this - m;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_day_last&
+year_month_day_last::operator+=(const years& y) NOEXCEPT
+{
+    *this = *this + y;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_day_last&
+year_month_day_last::operator-=(const years& y) NOEXCEPT
+{
+    *this = *this - y;
+    return *this;
+}
+
 CONSTCD11 inline year year_month_day_last::year() const NOEXCEPT {return y_;}
 CONSTCD11 inline month year_month_day_last::month() const NOEXCEPT {return mdl_.month();}
 
@@ -2500,30 +2503,8 @@ year_month_day_last::day() const NOEXCEPT
         date::day(31), date::day(31), date::day(30),
         date::day(31), date::day(30), date::day(31)
     };
-    return month() != feb || !y_.is_leap() ?
+    return month() != February || !y_.is_leap() ?
         d[static_cast<unsigned>(month()) - 1] : date::day{29};
-}
-
-template <class Duration, class>
-CONSTCD14
-inline
-year_month_day_last&
-year_month_day_last::operator+=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    *this = *this + d;
-    return *this;
-}
-
-template <class Duration, class>
-CONSTCD14
-inline
-year_month_day_last&
-year_month_day_last::operator-=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    *this = *this - d;
-    return *this;
 }
 
 CONSTCD14
@@ -2598,42 +2579,63 @@ operator>=(const year_month_day_last& x, const year_month_day_last& y) NOEXCEPT
     return !(x < y);
 }
 
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_day_last
-operator+(const year_month_day_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / last_spec();
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_day_last
-operator+(const Duration& d, const year_month_day_last& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / last_spec();
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_day_last
-operator-(const year_month_day_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() - d) / last_spec();
-}
-
 template<class CharT, class Traits>
 inline
 std::basic_ostream<CharT, Traits>&
 operator<<(std::basic_ostream<CharT, Traits>& os, const year_month_day_last& ymdl)
 {
     return os << ymdl.year() << '/' << ymdl.month_day_last();
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_day_last
+operator+(const year_month_day_last& ymdl, const months& dm) NOEXCEPT
+{
+    return (ymdl.year() / ymdl.month() + dm) / last;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_day_last
+operator+(const months& dm, const year_month_day_last& ymdl) NOEXCEPT
+{
+    return ymdl + dm;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_day_last
+operator-(const year_month_day_last& ymdl, const months& dm) NOEXCEPT
+{
+    return ymdl + (-dm);
+}
+
+CONSTCD11
+inline
+year_month_day_last
+operator+(const year_month_day_last& ymdl, const years& dy) NOEXCEPT
+{
+    return {ymdl.year()+dy, ymdl.month_day_last()};
+}
+
+CONSTCD11
+inline
+year_month_day_last
+operator+(const years& dy, const year_month_day_last& ymdl) NOEXCEPT
+{
+    return ymdl + dy;
+}
+
+CONSTCD11
+inline
+year_month_day_last
+operator-(const year_month_day_last& ymdl, const years& dy) NOEXCEPT
+{
+    return ymdl + (-dy);
 }
 
 // year_month_day
@@ -2671,25 +2673,41 @@ CONSTCD11 inline year year_month_day::year() const NOEXCEPT {return y_;}
 CONSTCD11 inline month year_month_day::month() const NOEXCEPT {return m_;}
 CONSTCD11 inline day year_month_day::day() const NOEXCEPT {return d_;}
 
-template <class Duration, class>
+template<class>
 CONSTCD14
 inline
 year_month_day&
-year_month_day::operator+=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
+year_month_day::operator+=(const months& m) NOEXCEPT
 {
-    *this = *this + d;
+    *this = *this + m;
     return *this;
 }
 
-template <class Duration, class>
+template<class>
 CONSTCD14
 inline
 year_month_day&
-year_month_day::operator-=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
+year_month_day::operator-=(const months& m) NOEXCEPT
 {
-    *this = *this - d;
+    *this = *this - m;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_day&
+year_month_day::operator+=(const years& y) NOEXCEPT
+{
+    *this = *this + y;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_day&
+year_month_day::operator-=(const years& y) NOEXCEPT
+{
+    *this = *this - y;
     return *this;
 }
 
@@ -2702,7 +2720,7 @@ year_month_day::to_days() const NOEXCEPT
              "This algorithm has not been ported to a 16 bit unsigned integer");
     static_assert(std::numeric_limits<int>::digits >= 20,
              "This algorithm has not been ported to a 16 bit signed integer");
-    auto const y = static_cast<int>(y_) - (m_ <= feb);
+    auto const y = static_cast<int>(y_) - (m_ <= February);
     auto const m = static_cast<unsigned>(m_);
     auto const d = static_cast<unsigned>(d_);
     auto const era = (y >= 0 ? y : y-399) / 400;
@@ -2788,36 +2806,6 @@ operator>=(const year_month_day& x, const year_month_day& y) NOEXCEPT
     return !(x < y);
 }
 
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_day
-operator+(const year_month_day& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / ymd.day();
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_day
-operator+(const Duration& d, const year_month_day& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / ymd.day();
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_day
-operator-(const year_month_day& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() - d) / ymd.day();
-}
-
 template<class CharT, class Traits>
 inline
 std::basic_ostream<CharT, Traits>&
@@ -2856,6 +2844,57 @@ year_month_day::from_days(days dp) NOEXCEPT
     return year_month_day{date::year{y + (m <= 2)}, date::month(m), date::day(d)};
 }
 
+template<class>
+CONSTCD14
+inline
+year_month_day
+operator+(const year_month_day& ymd, const months& dm) NOEXCEPT
+{
+    return (ymd.year() / ymd.month() + dm) / ymd.day();
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_day
+operator+(const months& dm, const year_month_day& ymd) NOEXCEPT
+{
+    return ymd + dm;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_day
+operator-(const year_month_day& ymd, const months& dm) NOEXCEPT
+{
+    return ymd + (-dm);
+}
+
+CONSTCD11
+inline
+year_month_day
+operator+(const year_month_day& ymd, const years& dy) NOEXCEPT
+{
+    return (ymd.year() + dy) / ymd.month() / ymd.day();
+}
+
+CONSTCD11
+inline
+year_month_day
+operator+(const years& dy, const year_month_day& ymd) NOEXCEPT
+{
+    return ymd + dy;
+}
+
+CONSTCD11
+inline
+year_month_day
+operator-(const year_month_day& ymd, const years& dy) NOEXCEPT
+{
+    return ymd + (-dy);
+}
+
 // year_month_weekday
 
 CONSTCD11
@@ -2879,6 +2918,44 @@ inline
 year_month_weekday::year_month_weekday(const local_days& dp) NOEXCEPT
     : year_month_weekday(from_days(dp.time_since_epoch()))
     {}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday&
+year_month_weekday::operator+=(const months& m) NOEXCEPT
+{
+    *this = *this + m;
+    return *this;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday&
+year_month_weekday::operator-=(const months& m) NOEXCEPT
+{
+    *this = *this - m;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_weekday&
+year_month_weekday::operator+=(const years& y) NOEXCEPT
+{
+    *this = *this + y;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_weekday&
+year_month_weekday::operator-=(const years& y) NOEXCEPT
+{
+    *this = *this - y;
+    return *this;
+}
 
 CONSTCD11 inline year year_month_weekday::year() const NOEXCEPT {return y_;}
 CONSTCD11 inline month year_month_weekday::month() const NOEXCEPT {return m_;}
@@ -2907,26 +2984,6 @@ year_month_weekday::weekday_indexed() const NOEXCEPT
     return wdi_;
 }
 
-template <class Duration, class>
-CONSTCD14
-year_month_weekday&
-year_month_weekday::operator+=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    *this = *this + d;
-    return *this;
-}
-
-template <class Duration, class>
-CONSTCD14
-year_month_weekday&
-year_month_weekday::operator-=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    *this = *this - d;
-    return *this;
-}
-
 CONSTCD14
 inline
 year_month_weekday::operator sys_days() const NOEXCEPT
@@ -2950,7 +3007,8 @@ year_month_weekday::ok() const NOEXCEPT
         return false;
     if (wdi_.index() <= 4)
         return true;
-    auto d2 = wdi_.weekday() - date::weekday(static_cast<sys_days>(y_/m_/1)) + days((wdi_.index()-1)*7 + 1);
+    auto d2 = wdi_.weekday() - date::weekday(static_cast<sys_days>(y_/m_/1)) +
+                  days((wdi_.index()-1)*7 + 1);
     return static_cast<unsigned>(d2.count()) <= static_cast<unsigned>((y_/m_/last).day());
 }
 
@@ -2992,36 +3050,6 @@ operator!=(const year_month_weekday& x, const year_month_weekday& y) NOEXCEPT
     return !(x == y);
 }
 
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_weekday
-operator+(const year_month_weekday& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / ymd.weekday_indexed();
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_weekday
-operator+(const Duration& d, const year_month_weekday& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / ymd.weekday_indexed();;
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_weekday
-operator-(const year_month_weekday& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() - d) / ymd.weekday_indexed();
-}
-
 template<class CharT, class Traits>
 inline
 std::basic_ostream<CharT, Traits>&
@@ -3029,6 +3057,57 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const year_month_weekday& ymwd
 {
     return os << ymwdi.year() << '/' << ymwdi.month()
               << '/' << ymwdi.weekday_indexed();
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday
+operator+(const year_month_weekday& ymwd, const months& dm) NOEXCEPT
+{
+    return (ymwd.year() / ymwd.month() + dm) / ymwd.weekday_indexed();
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday
+operator+(const months& dm, const year_month_weekday& ymwd) NOEXCEPT
+{
+    return ymwd + dm;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday
+operator-(const year_month_weekday& ymwd, const months& dm) NOEXCEPT
+{
+    return ymwd + (-dm);
+}
+
+CONSTCD11
+inline
+year_month_weekday
+operator+(const year_month_weekday& ymwd, const years& dy) NOEXCEPT
+{
+    return {ymwd.year()+dy, ymwd.month(), ymwd.weekday_indexed()};
+}
+
+CONSTCD11
+inline
+year_month_weekday
+operator+(const years& dy, const year_month_weekday& ymwd) NOEXCEPT
+{
+    return ymwd + dy;
+}
+
+CONSTCD11
+inline
+year_month_weekday
+operator-(const year_month_weekday& ymwd, const years& dy) NOEXCEPT
+{
+    return ymwd + (-dy);
 }
 
 // year_month_weekday_last
@@ -3042,6 +3121,44 @@ year_month_weekday_last::year_month_weekday_last(const date::year& y,
     , m_(m)
     , wdl_(wdl)
     {}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday_last&
+year_month_weekday_last::operator+=(const months& m) NOEXCEPT
+{
+    *this = *this + m;
+    return *this;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday_last&
+year_month_weekday_last::operator-=(const months& m) NOEXCEPT
+{
+    *this = *this - m;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_weekday_last&
+year_month_weekday_last::operator+=(const years& y) NOEXCEPT
+{
+    *this = *this + y;
+    return *this;
+}
+
+CONSTCD14
+inline
+year_month_weekday_last&
+year_month_weekday_last::operator-=(const years& y) NOEXCEPT
+{
+    *this = *this - y;
+    return *this;
+}
 
 CONSTCD11 inline year year_month_weekday_last::year() const NOEXCEPT {return y_;}
 CONSTCD11 inline month year_month_weekday_last::month() const NOEXCEPT {return m_;}
@@ -3060,28 +3177,6 @@ weekday_last
 year_month_weekday_last::weekday_last() const NOEXCEPT
 {
     return wdl_;
-}
-
-template <class Duration, class>
-CONSTCD14
-inline
-year_month_weekday_last&
-year_month_weekday_last::operator+=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    *this = *this + d;
-    return *this;
-}
-
-template <class Duration, class>
-CONSTCD14
-inline
-year_month_weekday_last&
-year_month_weekday_last::operator-=(const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    *this = *this - d;
-    return *this;
 }
 
 CONSTCD14
@@ -3132,42 +3227,63 @@ operator!=(const year_month_weekday_last& x, const year_month_weekday_last& y) N
     return !(x == y);
 }
 
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_weekday_last
-operator+(const year_month_weekday_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / ymd.weekday_last();
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_weekday_last
-operator+(const Duration& d, const year_month_weekday_last& ymd)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() + d) / ymd.weekday_last();;
-}
-
-template <class Duration, class>
-CONSTCD11
-inline
-year_month_weekday_last
-operator-(const year_month_weekday_last& ymd, const Duration& d)
-NOEXCEPT_CONVERTIBLE_TO_YEARS_OR_MONTHS
-{
-    return (ymd.year() / ymd.month() - d) / ymd.weekday_last();
-}
-
 template<class CharT, class Traits>
 inline
 std::basic_ostream<CharT, Traits>&
 operator<<(std::basic_ostream<CharT, Traits>& os, const year_month_weekday_last& ymwdl)
 {
     return os << ymwdl.year() << '/' << ymwdl.month() << '/' << ymwdl.weekday_last();
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday_last
+operator+(const year_month_weekday_last& ymwdl, const months& dm) NOEXCEPT
+{
+    return (ymwdl.year() / ymwdl.month() + dm) / ymwdl.weekday_last();
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday_last
+operator+(const months& dm, const year_month_weekday_last& ymwdl) NOEXCEPT
+{
+    return ymwdl + dm;
+}
+
+template<class>
+CONSTCD14
+inline
+year_month_weekday_last
+operator-(const year_month_weekday_last& ymwdl, const months& dm) NOEXCEPT
+{
+    return ymwdl + (-dm);
+}
+
+CONSTCD11
+inline
+year_month_weekday_last
+operator+(const year_month_weekday_last& ymwdl, const years& dy) NOEXCEPT
+{
+    return {ymwdl.year()+dy, ymwdl.month(), ymwdl.weekday_last()};
+}
+
+CONSTCD11
+inline
+year_month_weekday_last
+operator+(const years& dy, const year_month_weekday_last& ymwdl) NOEXCEPT
+{
+    return ymwdl + dy;
+}
+
+CONSTCD11
+inline
+year_month_weekday_last
+operator-(const year_month_weekday_last& ymwdl, const years& dy) NOEXCEPT
+{
+    return ymwdl + (-dy);
 }
 
 // year_month from operator/()
@@ -4300,7 +4416,7 @@ template <class Duration>
 struct fields
 {
     year_month_day        ymd{nanyear/0/0};
-    weekday               wd{7u};
+    weekday               wd{8u};
     time_of_day<Duration> tod{};
     bool                  has_tod = false;
 
@@ -4335,22 +4451,22 @@ extract_weekday(std::basic_ostream<CharT, Traits>& os, const fields<Duration>& f
     {
         // fds does not contain a valid weekday
         os.setstate(std::ios::failbit);
-        return 7;
+        return 8;
     }
-    unsigned wd;
+    weekday wd;
     if (fds.ymd.ok())
     {
-        wd = static_cast<unsigned>(weekday{fds.ymd});
-        if (fds.wd.ok() && wd != static_cast<unsigned>(fds.wd))
+        wd = weekday{sys_days(fds.ymd)};
+        if (fds.wd.ok() && wd != fds.wd)
         {
             // fds.ymd and fds.wd are inconsistent
             os.setstate(std::ios::failbit);
-            return 7;
+            return 8;
         }
     }
     else
-        wd = static_cast<unsigned>(fds.wd);
-    return wd;
+        wd = fds.wd;
+    return static_cast<unsigned>((wd - Sunday).count());
 }
 
 template <class CharT, class Traits, class Duration>
@@ -4850,7 +4966,8 @@ to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
                         os.setstate(std::ios::failbit);
                     auto ld = local_days(fds.ymd);
                     auto y = year_month_day{ld + days{3}}.year();
-                    auto start = local_days((y - years{1})/date::dec/thu[last]) + (mon-thu);
+                    auto start = local_days((y-years{1})/December/Thursday[last]) +
+                                 (Monday-Thursday);
                     if (ld < start)
                         --y;
                     if (*fmt == CharT{'G'})
@@ -4924,7 +5041,7 @@ to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
                         os.setstate(std::ios::failbit);
                     auto ld = local_days(fds.ymd);
                     auto y = fds.ymd.year();
-                    auto doy = ld - local_days(y/jan/1) + days{1};
+                    auto doy = ld - local_days(y/January/1) + days{1};
                     save_ostream<CharT, Traits> _(os);
                     os.fill('0');
                     os.flags(std::ios::dec | std::ios::right);
@@ -5232,7 +5349,7 @@ to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
                     if (modified == CharT{})
 #endif
                     {
-                        auto st = local_days(sun[1]/jan/ymd.year());
+                        auto st = local_days(Sunday[1]/January/ymd.year());
                         if (ld < st)
                             os << CharT{'0'} << CharT{'0'};
                         else
@@ -5277,11 +5394,13 @@ to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
 #endif
                     {
                         auto y = year_month_day{ld + days{3}}.year();
-                        auto st = local_days((y - years{1})/12/thu[last]) + (mon-thu);
+                        auto st = local_days((y-years{1})/12/Thursday[last]) +
+                                  (Monday-Thursday);
                         if (ld < st)
                         {
                             --y;
-                            st = local_days((y - years{1})/12/thu[last]) + (mon-thu);
+                            st = local_days((y - years{1})/12/Thursday[last]) +
+                                 (Monday-Thursday);
                         }
                         auto wn = duration_cast<weeks>(ld - st).count() + 1;
                         if (wn < 10)
@@ -5355,7 +5474,7 @@ to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
                     if (modified == CharT{})
 #endif
                     {
-                        auto st = local_days(mon[1]/jan/ymd.year());
+                        auto st = local_days(Monday[1]/January/ymd.year());
                         if (ld < st)
                             os << CharT{'0'} << CharT{'0'};
                         else
@@ -6035,7 +6154,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
         CONSTDATA int not_a_minute = not_a_hour;
         CONSTDATA Duration not_a_second = Duration::min();
         CONSTDATA int not_a_doy = 0;
-        CONSTDATA int not_a_weekday = 7;
+        CONSTDATA int not_a_weekday = 8;
         CONSTDATA int not_a_week_num = 100;
         CONSTDATA int not_a_ampm = -1;
         CONSTDATA minutes not_a_offset = minutes::min();
@@ -6104,7 +6223,8 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
                         if (modified != CharT{'E'})
 #endif
                         {
-                            read(is, ru{trial_wd, 1, width == -1 ? 1u : static_cast<unsigned>(width)});
+                            read(is, ru{trial_wd, 1, width == -1 ?
+                                                      1u : static_cast<unsigned>(width)});
                             if (!is.fail())
                             {
                                 if (*fmt == 'u')
@@ -7064,7 +7184,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
                 }
                 else  // !command
                 {
-                    if (isspace(*fmt))
+                    if (isspace(static_cast<unsigned char>(*fmt)))
                         ws(is); // space matches 0 or more white space characters
                     else
                         read(is, *fmt);
@@ -7216,8 +7336,8 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
             if (ymd.ok())
             {
                 if (wd == not_a_weekday)
-                    wd = static_cast<int>(static_cast<unsigned>(weekday(ymd)));
-                else if (wd != static_cast<int>(static_cast<unsigned>(weekday(ymd))))
+                    wd = static_cast<int>((weekday(sys_days(ymd)) - Sunday).count());
+                else if (wd != static_cast<int>((weekday(sys_days(ymd)) - Sunday).count()))
                     goto broken;
                 if (!computed)
                 {
@@ -7638,13 +7758,24 @@ parse(const CharT* format, Parsable& tp,
 namespace detail
 {
 
-#if __cplusplus >= 201402  && (!defined(__EDG_VERSION__) || __EDG_VERSION__ > 411) \
-                           && (!defined(__SUNPRO_CC) || __SUNPRO_CC > 0x5150)
+template <class CharT, std::size_t N>
+class string_literal;
+
+template <class CharT1, class CharT2, std::size_t N1, std::size_t N2>
+inline
+CONSTCD14
+string_literal<typename std::conditional<sizeof(CharT2) <= sizeof(CharT1), CharT1, CharT2>::type,
+               N1 + N2 - 1>
+operator+(const string_literal<CharT1, N1>& x, const string_literal<CharT2, N2>& y) NOEXCEPT;
 
 template <class CharT, std::size_t N>
 class string_literal
 {
     CharT p_[N];
+
+    CONSTCD11 string_literal() NOEXCEPT
+      : p_{}
+    {}
 
 public:
     using const_iterator = const CharT*;
@@ -7653,9 +7784,23 @@ public:
     string_literal& operator=(string_literal const&) = delete;
 
     template <std::size_t N1 = 2,
-              class = std::enable_if_t<N1 == N>>
-    CONSTCD14 string_literal(CharT c) NOEXCEPT
+              class = typename std::enable_if<N1 == N>::type>
+    CONSTCD11 string_literal(CharT c) NOEXCEPT
         : p_{c}
+    {
+    }
+
+    template <std::size_t N1 = 3,
+              class = typename std::enable_if<N1 == N>::type>
+    CONSTCD11 string_literal(CharT c1, CharT c2) NOEXCEPT
+        : p_{c1, c2}
+    {
+    }
+
+    template <std::size_t N1 = 4,
+              class = typename std::enable_if<N1 == N>::type>
+    CONSTCD11 string_literal(CharT c1, CharT c2, CharT c3) NOEXCEPT
+        : p_{c1, c2, c3}
     {
     }
 
@@ -7666,7 +7811,8 @@ public:
             p_[i] = a[i];
     }
 
-    template <class U = CharT, class = std::enable_if_t<1 < sizeof(U)>>
+    template <class U = CharT,
+              class = typename std::enable_if<(1 < sizeof(U))>::type>
     CONSTCD14 string_literal(const char(&a)[N]) NOEXCEPT
         : p_{}
     {
@@ -7674,7 +7820,8 @@ public:
             p_[i] = a[i];
     }
 
-    template <class CharT2, class = std::enable_if_t<!std::is_same<CharT2, CharT>{}>>
+    template <class CharT2,
+              class = typename std::enable_if<!std::is_same<CharT2, CharT>::value>::type>
     CONSTCD14 string_literal(string_literal<CharT2, N> const& a) NOEXCEPT
         : p_{}
     {
@@ -7682,26 +7829,13 @@ public:
             p_[i] = a[i];
     }
 
-    template <std::size_t N1, std::size_t N2,
-              class = std::enable_if_t<N1 + N2 - 1 == N>>
-    CONSTCD14 string_literal(const string_literal<CharT, N1>& x,
-                             const string_literal<CharT, N2>& y) NOEXCEPT
-        : p_{}
-    {
-        std::size_t i = 0;
-        for (; i < N1-1; ++i)
-            p_[i] = x[i];
-        for (std::size_t j = 0; j < N2; ++j, ++i)
-            p_[i] = y[j];
-    }
+    CONSTCD11 const CharT* data() const NOEXCEPT {return p_;}
+    CONSTCD11 std::size_t size() const NOEXCEPT {return N-1;}
 
-    CONSTCD14 const CharT* data() const NOEXCEPT {return p_;}
-    CONSTCD14 std::size_t size() const NOEXCEPT {return N-1;}
+    CONSTCD11 const_iterator begin() const NOEXCEPT {return p_;}
+    CONSTCD11 const_iterator end()   const NOEXCEPT {return p_ + N-1;}
 
-    CONSTCD14 const_iterator begin() const NOEXCEPT {return p_;}
-    CONSTCD14 const_iterator end()   const NOEXCEPT {return p_ + N-1;}
-
-    CONSTCD14 CharT const& operator[](std::size_t n) const NOEXCEPT
+    CONSTCD11 CharT const& operator[](std::size_t n) const NOEXCEPT
     {
         return p_[n];
     }
@@ -7713,38 +7847,64 @@ public:
     {
         return os << s.p_;
     }
+
+    template <class CharT1, class CharT2, std::size_t N1, std::size_t N2>
+    friend
+    CONSTCD14
+    string_literal<typename std::conditional<sizeof(CharT2) <= sizeof(CharT1), CharT1, CharT2>::type,
+                   N1 + N2 - 1>
+    operator+(const string_literal<CharT1, N1>& x, const string_literal<CharT2, N2>& y) NOEXCEPT;
 };
+
+template <class CharT>
+CONSTCD11
+inline
+string_literal<CharT, 3>
+operator+(const string_literal<CharT, 2>& x, const string_literal<CharT, 2>& y) NOEXCEPT
+{
+  return string_literal<CharT, 3>(x[0], y[0]);
+}
+
+template <class CharT>
+CONSTCD11
+inline
+string_literal<CharT, 4>
+operator+(const string_literal<CharT, 3>& x, const string_literal<CharT, 2>& y) NOEXCEPT
+{
+  return string_literal<CharT, 4>(x[0], x[1], y[0]);
+}
 
 template <class CharT1, class CharT2, std::size_t N1, std::size_t N2>
 CONSTCD14
 inline
-string_literal<std::conditional_t<sizeof(CharT2) <= sizeof(CharT1), CharT1, CharT2>,
+string_literal<typename std::conditional<sizeof(CharT2) <= sizeof(CharT1), CharT1, CharT2>::type,
                N1 + N2 - 1>
 operator+(const string_literal<CharT1, N1>& x, const string_literal<CharT2, N2>& y) NOEXCEPT
 {
-    using CharT = std::conditional_t<sizeof(CharT2) <= sizeof(CharT1), CharT1, CharT2>;
-    return string_literal<CharT, N1 + N2 - 1>{string_literal<CharT, N1>{x},
-                                              string_literal<CharT, N2>{y}};
+    using CT = typename std::conditional<sizeof(CharT2) <= sizeof(CharT1), CharT1, CharT2>::type;
+
+    string_literal<CT, N1 + N2 - 1> r;
+    std::size_t i = 0;
+    for (; i < N1-1; ++i)
+       r.p_[i] = CT(x.p_[i]);
+    for (std::size_t j = 0; j < N2; ++j, ++i)
+       r.p_[i] = CT(y.p_[j]);
+
+    return r;
 }
+
 
 template <class CharT, class Traits, class Alloc, std::size_t N>
 inline
 std::basic_string<CharT, Traits, Alloc>
-operator+(std::basic_string<CharT, Traits, Alloc> x,
-          const string_literal<CharT, N>& y) NOEXCEPT
+operator+(std::basic_string<CharT, Traits, Alloc> x, const string_literal<CharT, N>& y)
 {
     x.append(y.data(), y.size());
     return x;
 }
 
-template <class CharT, std::size_t N>
-CONSTCD14
-inline
-string_literal<CharT, N>
-msl(const CharT(&a)[N]) NOEXCEPT
-{
-    return string_literal<CharT, N>{a};
-}
+#if __cplusplus >= 201402  && (!defined(__EDG_VERSION__) || __EDG_VERSION__ > 411) \
+                           && (!defined(__SUNPRO_CC) || __SUNPRO_CC > 0x5150)
 
 template <class CharT,
           class = std::enable_if_t<std::is_same<CharT, char>{} ||
@@ -7829,198 +7989,6 @@ msl(std::ratio<N, D>) NOEXCEPT
     return msl(CharT{'['}) + msl<R::num>() + msl(CharT{']'});
 }
 
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::atto) NOEXCEPT
-{
-    return msl(CharT{'a'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::femto) NOEXCEPT
-{
-    return msl(CharT{'f'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::pico) NOEXCEPT
-{
-    return msl(CharT{'p'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::nano) NOEXCEPT
-{
-    return msl(CharT{'n'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-std::enable_if_t
-<
-    std::is_same<CharT, char>{},
-    string_literal<char, 3>
->
-msl(std::micro) NOEXCEPT
-{
-    return string_literal<char, 3>{"\xC2\xB5"};
-}
-
-template <class CharT>
-CONSTCD14
-inline
-std::enable_if_t
-<
-    !std::is_same<CharT, char>{},
-    string_literal<CharT, 2>
->
-msl(std::micro) NOEXCEPT
-{
-    return string_literal<CharT, 2>{CharT{static_cast<unsigned char>('\xB5')}};
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::milli) NOEXCEPT
-{
-    return msl(CharT{'m'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::centi) NOEXCEPT
-{
-    return msl(CharT{'c'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::deci) NOEXCEPT
-{
-    return msl(CharT{'d'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::deca) NOEXCEPT
-{
-    return string_literal<CharT, 3>{"da"};
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::hecto) NOEXCEPT
-{
-    return msl(CharT{'h'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::kilo) NOEXCEPT
-{
-    return msl(CharT{'k'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::mega) NOEXCEPT
-{
-    return msl(CharT{'M'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::giga) NOEXCEPT
-{
-    return msl(CharT{'G'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::tera) NOEXCEPT
-{
-    return msl(CharT{'T'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::peta) NOEXCEPT
-{
-    return msl(CharT{'P'});
-}
-
-template <class CharT>
-CONSTCD14
-inline
-auto
-msl(std::exa) NOEXCEPT
-{
-    return msl(CharT{'E'});
-}
-
-template <class CharT, class Period>
-CONSTCD14
-auto
-get_units(Period p)
-{
-    return msl<CharT>(p) + string_literal<CharT, 2>{"s"};
-}
-
-template <class CharT>
-CONSTCD14
-auto
-get_units(std::ratio<1>)
-{
-    return string_literal<CharT, 2>{"s"};
-}
-
-template <class CharT>
-CONSTCD14
-auto
-get_units(std::ratio<60>)
-{
-    return string_literal<CharT, 4>{"min"};
-}
-
-template <class CharT>
-CONSTCD14
-auto
-get_units(std::ratio<3600>)
-{
-    return string_literal<CharT, 2>{"h"};
-}
 
 #else  // __cplusplus < 201402 || (defined(__EDG_VERSION__) && __EDG_VERSION__ <= 411)
 
@@ -8032,6 +8000,7 @@ to_string(std::uint64_t x)
 }
 
 template <class CharT>
+inline
 std::basic_string<CharT>
 to_string(std::uint64_t x)
 {
@@ -8066,179 +8035,214 @@ msl(std::ratio<N, D>)
     return std::basic_string<CharT>(1, '[') + to_string<CharT>(R::num) + CharT{']'};
 }
 
+#endif  // __cplusplus < 201402 || (defined(__EDG_VERSION__) && __EDG_VERSION__ <= 411)
+
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::atto)
+string_literal<CharT, 2>
+msl(std::atto) NOEXCEPT
 {
-    return {'a'};
+    return string_literal<CharT, 2>{'a'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::femto)
+string_literal<CharT, 2>
+msl(std::femto) NOEXCEPT
 {
-    return {'f'};
+    return string_literal<CharT, 2>{'f'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::pico)
+string_literal<CharT, 2>
+msl(std::pico) NOEXCEPT
 {
-    return {'p'};
+    return string_literal<CharT, 2>{'p'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::nano)
+string_literal<CharT, 2>
+msl(std::nano) NOEXCEPT
 {
-    return {'n'};
+    return string_literal<CharT, 2>{'n'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
 typename std::enable_if
 <
     std::is_same<CharT, char>::value,
-    std::string
+    string_literal<char, 3>
 >::type
-msl(std::micro)
+msl(std::micro) NOEXCEPT
 {
-    return "\xC2\xB5";
+    return string_literal<char, 3>{'\xC2', '\xB5'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
 typename std::enable_if
 <
     !std::is_same<CharT, char>::value,
-    std::basic_string<CharT>
+    string_literal<CharT, 2>
 >::type
-msl(std::micro)
+msl(std::micro) NOEXCEPT
 {
-    return {CharT(static_cast<unsigned char>('\xB5'))};
+    return string_literal<CharT, 2>{CharT{static_cast<unsigned char>('\xB5')}};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::milli)
+string_literal<CharT, 2>
+msl(std::milli) NOEXCEPT
 {
-    return {'m'};
+    return string_literal<CharT, 2>{'m'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::centi)
+string_literal<CharT, 2>
+msl(std::centi) NOEXCEPT
 {
-    return {'c'};
+    return string_literal<CharT, 2>{'c'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::deci)
+string_literal<CharT, 3>
+msl(std::deca) NOEXCEPT
 {
-    return {'d'};
+    return string_literal<CharT, 3>{'d', 'a'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::deca)
+string_literal<CharT, 2>
+msl(std::deci) NOEXCEPT
 {
-    return {'d', 'a'};
+    return string_literal<CharT, 2>{'d'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::hecto)
+string_literal<CharT, 2>
+msl(std::hecto) NOEXCEPT
 {
-    return {'h'};
+    return string_literal<CharT, 2>{'h'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::kilo)
+string_literal<CharT, 2>
+msl(std::kilo) NOEXCEPT
 {
-    return {'k'};
+    return string_literal<CharT, 2>{'k'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::mega)
+string_literal<CharT, 2>
+msl(std::mega) NOEXCEPT
 {
-    return {'M'};
+    return string_literal<CharT, 2>{'M'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::giga)
+string_literal<CharT, 2>
+msl(std::giga) NOEXCEPT
 {
-    return {'G'};
+    return string_literal<CharT, 2>{'G'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::tera)
+string_literal<CharT, 2>
+msl(std::tera) NOEXCEPT
 {
-    return {'T'};
+    return string_literal<CharT, 2>{'T'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::peta)
+string_literal<CharT, 2>
+msl(std::peta) NOEXCEPT
 {
-    return {'P'};
+    return string_literal<CharT, 2>{'P'};
 }
 
 template <class CharT>
+CONSTCD11
 inline
-std::basic_string<CharT>
-msl(std::exa)
+string_literal<CharT, 2>
+msl(std::exa) NOEXCEPT
 {
-    return {'E'};
+    return string_literal<CharT, 2>{'E'};
 }
 
 template <class CharT, class Period>
-std::basic_string<CharT>
+CONSTCD11
+inline
+auto
 get_units(Period p)
+ -> decltype(msl<CharT>(p) + string_literal<CharT, 2>{'s'})
 {
-    return msl<CharT>(p) + CharT{'s'};
+    return msl<CharT>(p) + string_literal<CharT, 2>{'s'};
 }
 
 template <class CharT>
-std::basic_string<CharT>
+CONSTCD11
+inline
+string_literal<CharT, 2>
 get_units(std::ratio<1>)
 {
-    return {'s'};
+    return string_literal<CharT, 2>{'s'};
 }
 
 template <class CharT>
-std::basic_string<CharT>
-get_units(std::ratio<60>)
-{
-    return {'m', 'i', 'n'};
-}
-
-template <class CharT>
-std::basic_string<CharT>
+CONSTCD11
+inline
+string_literal<CharT, 2>
 get_units(std::ratio<3600>)
 {
-    return {'h'};
+    return string_literal<CharT, 2>{'h'};
 }
 
-#endif  // __cplusplus < 201402 || (defined(__EDG_VERSION__) && __EDG_VERSION__ <= 411)
+template <class CharT>
+CONSTCD11
+inline
+string_literal<CharT, 4>
+get_units(std::ratio<60>)
+{
+    return string_literal<CharT, 4>{'m', 'i', 'n'};
+}
+
+template <class CharT>
+CONSTCD11
+inline
+string_literal<CharT, 2>
+get_units(std::ratio<86400>)
+{
+    return string_literal<CharT, 2>{'d'};
+}
 
 template <class CharT, class Traits = std::char_traits<CharT>>
 struct make_string;
@@ -8308,10 +8312,8 @@ operator<<(std::basic_ostream<CharT, Traits>& os,
 
 }  // namespace date
 
-
 #ifdef __GNUC__
 # pragma GCC diagnostic pop
 #endif
-
 
 #endif  // DATE_H
