@@ -4493,8 +4493,7 @@ inline
 std::pair<const std::string*, const std::string*>
 weekday_names()
 {
-    using namespace std;
-    static const string nm[] =
+    static const std::string nm[] =
     {
         "Sunday",
         "Monday",
@@ -4511,15 +4510,14 @@ weekday_names()
         "Fri",
         "Sat"
     };
-    return make_pair(nm, nm+sizeof(nm)/sizeof(nm[0]));
+    return std::make_pair(nm, nm+sizeof(nm)/sizeof(nm[0]));
 }
 
 inline
 std::pair<const std::string*, const std::string*>
 month_names()
 {
-    using namespace std;
-    static const string nm[] =
+    static const std::string nm[] =
     {
         "January",
         "February",
@@ -4546,20 +4544,19 @@ month_names()
         "Nov",
         "Dec"
     };
-    return make_pair(nm, nm+sizeof(nm)/sizeof(nm[0]));
+    return std::make_pair(nm, nm+sizeof(nm)/sizeof(nm[0]));
 }
 
 inline
 std::pair<const std::string*, const std::string*>
 ampm_names()
 {
-    using namespace std;
-    static const string nm[] =
+    static const std::string nm[] =
     {
         "AM",
         "PM"
     };
-    return make_pair(nm, nm+sizeof(nm)/sizeof(nm[0]));
+    return std::make_pair(nm, nm+sizeof(nm)/sizeof(nm[0]));
 }
 
 template <class CharT, class Traits, class FwdIter>
@@ -5037,16 +5034,29 @@ to_stream(std::basic_ostream<CharT, Traits>& os, const CharT* fmt,
             {
                 if (modified == CharT{})
                 {
-                    if (!fds.ymd.ok())
+                    if (fds.ymd.ok() || fds.has_tod)
+                    {
+                        days doy;
+                        if (fds.ymd.ok())
+                        {
+                            auto ld = local_days(fds.ymd);
+                            auto y = fds.ymd.year();
+                            doy = ld - local_days(y/January/1) + days{1};
+                        }
+                        else
+                        {
+                            doy = duration_cast<days>(fds.tod.to_duration());
+                        }
+                        save_ostream<CharT, Traits> _(os);
+                        os.fill('0');
+                        os.flags(std::ios::dec | std::ios::right);
+                        os.width(3);
+                        os << doy.count();
+                    }
+                    else
+                    {
                         os.setstate(std::ios::failbit);
-                    auto ld = local_days(fds.ymd);
-                    auto y = fds.ymd.year();
-                    auto doy = ld - local_days(y/January/1) + days{1};
-                    save_ostream<CharT, Traits> _(os);
-                    os.fill('0');
-                    os.flags(std::ios::dec | std::ios::right);
-                    os.width(3);
-                    os << doy.count();
+                    }
                 }
                 else
                 {
@@ -6153,7 +6163,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
         CONSTDATA int not_a_hour_12_value = 0;
         CONSTDATA int not_a_minute = not_a_hour;
         CONSTDATA Duration not_a_second = Duration::min();
-        CONSTDATA int not_a_doy = 0;
+        CONSTDATA int not_a_doy = -1;
         CONSTDATA int not_a_weekday = 8;
         CONSTDATA int not_a_week_num = 100;
         CONSTDATA int not_a_ampm = -1;
@@ -7320,7 +7330,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
                     goto broken;
                 computed = true;
             }
-            if (j != 0 && Y != not_a_year)
+            if (j != not_a_doy && Y != not_a_year)
             {
                 auto ymd_trial = year_month_day{local_days(year{Y}/1/1) + days{j-1}};
                 if (m == 0)
@@ -7331,6 +7341,7 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
                     d = static_cast<int>(static_cast<unsigned>(ymd_trial.day()));
                 else if (day(static_cast<unsigned>(d)) != ymd_trial.day())
                     goto broken;
+                j = not_a_doy;
             }
             auto ymd = year{Y}/m/d;
             if (ymd.ok())
@@ -7428,6 +7439,11 @@ from_stream(std::basic_istream<CharT, Traits>& is, const CharT* fmt,
             {
                 fds.has_tod = true;
                 fds.tod.s_ = detail::decimal_format_seconds<Duration>{s};
+            }
+            if (j != not_a_doy)
+            {
+                fds.has_tod = true;
+                fds.tod.h_ += hours{days{j}};
             }
             if (wd != not_a_weekday)
                 fds.wd = weekday{static_cast<unsigned>(wd)};
