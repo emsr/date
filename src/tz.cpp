@@ -2660,6 +2660,8 @@ init_tzdb()
                 strcmp(d->d_name, "+VERSION")     == 0      ||
                 strcmp(d->d_name, "zone.tab")     == 0      ||
                 strcmp(d->d_name, "zone1970.tab") == 0      ||
+                strcmp(d->d_name, "tzdata.zi")    == 0      ||
+                strcmp(d->d_name, "leapseconds")  == 0      ||
                 strcmp(d->d_name, "leap-seconds.list") == 0   )
                 continue;
             auto subname = dirname + folder_delimiter + d->d_name;
@@ -2974,7 +2976,7 @@ make_directory(const std::string& folder)
 #    endif // !USE_SHELL_API
 #  else  // !_WIN32
 #    if USE_SHELL_API
-    return std::system(("mkdir " + folder).c_str()) == EXIT_SUCCESS;
+    return std::system(("mkdir -p " + folder).c_str()) == EXIT_SUCCESS;
 #    else  // !USE_SHELL_API
     return mkdir(folder.c_str(), 0777) == 0;
 #    endif  // !USE_SHELL_API
@@ -3259,10 +3261,11 @@ remote_download(const std::string& version)
     // Download folder should be always available for Windows
 #  else  // !_WIN32
     // Create download folder if it does not exist on UNIX system
-    auto download_folder = get_download_folder();
+    auto download_folder = get_install();
     if (!file_exists(download_folder))
     {
-        make_directory(download_folder);
+        if (!make_directory(download_folder))
+            return false;
     }
 #  endif  // _WIN32
 

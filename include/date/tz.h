@@ -368,7 +368,7 @@ public:
               >::type>
         explicit zoned_time(std::string_view name);
 #else
-#if !defined(_MSC_VER) || (_MSC_VER > 1900)
+#  if !defined(_MSC_VER) || (_MSC_VER > 1900)
     template <class T = TimeZonePtr,
               class = typename std::enable_if
               <
@@ -378,7 +378,7 @@ public:
                       decltype(zoned_traits<T>::locate_zone(std::string()))
                   >::value
               >::type>
-#endif
+#  endif
         explicit zoned_time(const std::string& name);
 #endif
 
@@ -1376,7 +1376,7 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(TimeZonePtr z)
 #if HAS_STRING_VIEW
 
 template <class Duration, class TimeZonePtr>
-template <class, class>
+template <class T, class>
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name)
     : zoned_time(zoned_traits<TimeZonePtr>::locate_zone(name))
@@ -1451,7 +1451,7 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(TimeZonePtr z,
 #if HAS_STRING_VIEW
 
 template <class Duration, class TimeZonePtr>
-template <class, class>
+template <class T, class>
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name,
                                               const sys_time<Duration>& st)
@@ -1459,7 +1459,7 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name,
     {}
 
 template <class Duration, class TimeZonePtr>
-template <class, class>
+template <class T, class>
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name,
                                               const local_time<Duration>& t)
@@ -1467,7 +1467,7 @@ zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name,
     {}
 
 template <class Duration, class TimeZonePtr>
-template <class, class>
+template <class T, class>
 inline
 zoned_time<Duration, TimeZonePtr>::zoned_time(std::string_view name,
                                               const local_time<Duration>& t, choose c)
