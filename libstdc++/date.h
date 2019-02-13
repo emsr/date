@@ -1,8 +1,13 @@
 
 #include <chrono>
 #include <ostream>
+#include <vector>
+#include <string>
+#include <atomic>
 
 #pragma GCC system_header
+
+// This could use a dose of <=> ...
 
 namespace std {
 namespace chrono {
@@ -17,6 +22,9 @@ namespace chrono {
     constexpr int
     __days_per_month[12]
     { 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    constexpr int
+    __last_day[12]
+    { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
   }
 
   // TRAITS
@@ -89,6 +97,8 @@ namespace chrono {
   {
     explicit last_spec() = default;
   };
+
+  constexpr last_spec last{};
 
   // CALENDAR COMPOSITION OPERATORS
 
@@ -212,12 +222,122 @@ namespace chrono {
   constexpr year_month_weekday_last
   operator/(const month_weekday_last& __mwdl, int __y) noexcept;
 
+  // OTHER CALENDAR OPERATORS
+
+  constexpr year_month_day_last
+  operator+(const year_month_day_last& __ymdl, const months& __dm) noexcept;
+
+  constexpr year_month_day_last
+  operator-(const year_month_day_last& __ymdl, const months& __dm) noexcept;
+
+  constexpr year_month_day_last
+  operator+(const year_month_day_last& __ymdl, const years& __y) noexcept;
+
+  constexpr year_month_day_last
+  operator-(const year_month_day_last& __ymdl, const years& __y) noexcept;
+
+  constexpr year_month_weekday_last
+  operator+(const year_month_weekday_last& __ymwdl,
+	    const months& __dm) noexcept;
+  constexpr year_month_weekday_last
+  operator+(const months& __dm,
+	    const year_month_weekday_last& __ymwdl) noexcept;
+  constexpr year_month_weekday_last
+  operator+(const year_month_weekday_last& __ymwdl,
+	    const years& __dy) noexcept;
+  constexpr year_month_weekday_last
+  operator+(const years& __dy,
+	    const year_month_weekday_last& __ymwdl) noexcept;
+  constexpr year_month_weekday_last
+  operator-(const year_month_weekday_last& __ymwdl,
+	    const months& __dm) noexcept;
+  constexpr year_month_weekday_last
+  operator-(const year_month_weekday_last& __ymwdl,
+	    const years& __dy) noexcept;
+
   // CLOCKS
 
-  class utc_clock;
-  class tai_clock;
-  class gps_clock;
-  class file_clock;
+  class utc_clock
+  {
+  public:
+
+    using duration = system_clock::duration;
+    using rep = duration::rep;
+    using period = duration::period;
+    using time_point = chrono::time_point<utc_clock>;
+    static constexpr bool is_steady = false;
+
+    static time_point
+    now();
+
+    template<typename _Duration>
+      static chrono::time_point<system_clock, common_type_t<_Duration, seconds>>
+      to_sys(const chrono::time_point<utc_clock, _Duration>& __t);
+
+    template<typename _Duration>
+      static chrono::time_point<utc_clock, common_type_t<_Duration, seconds>>
+      from_sys(const chrono::time_point<system_clock, _Duration>& __t);
+  };
+
+  class tai_clock
+  {
+  public:
+
+    using duration = system_clock::duration;
+    using rep = duration::rep;
+    using period = duration::period;
+    using time_point = chrono::time_point<tai_clock>;
+    static constexpr bool is_steady = false;
+
+    static time_point
+    now();
+
+    template<typename _Duration>
+      static chrono::time_point<utc_clock, common_type_t<_Duration, seconds>>
+      to_utc(const chrono::time_point<tai_clock, _Duration>&) noexcept;
+
+    template<typename _Duration>
+      static chrono::time_point<tai_clock, common_type_t<_Duration, seconds>>
+      from_utc(const chrono::time_point<utc_clock, _Duration>&) noexcept;
+  };
+
+  class gps_clock
+  {
+  public:
+
+    using duration = system_clock::duration;
+    using rep = duration::rep;
+    using period = duration::period;
+    using time_point = chrono::time_point<gps_clock>;
+    static constexpr bool is_steady = false;
+
+    static time_point
+    now();
+
+    template<typename _Duration>
+      static chrono::time_point<utc_clock, common_type_t<_Duration, seconds>>
+      to_utc(const chrono::time_point<gps_clock, _Duration>&) noexcept;
+
+    template<typename _Duration>
+      static chrono::time_point<gps_clock, common_type_t<_Duration, seconds>>
+      from_utc(const chrono::time_point<utc_clock, _Duration>&) noexcept;
+  };
+
+  class file_clock
+  {
+  public:
+
+    using duration = system_clock::duration;
+    using rep = duration::rep;
+    using period = duration::period;
+    using time_point = chrono::time_point<file_clock>;
+    static constexpr bool is_steady = false;
+
+    static time_point
+    now() noexcept;
+
+    // Conversion functions, see below
+  };
 
   // TIME_POINT FAMILIES
 
@@ -252,9 +372,9 @@ namespace chrono {
   template<typename _DestClock, typename _SourceClock>
     struct clock_time_conversion;
 
-  template<typename _DestClock, typename _SourceClock, typename _Duration>
-    time_point<_DestClock, see below>
-    clock_cast(const time_point<_SourceClock, _Duration>& __t);
+  //template<typename _DestClock, typename _SourceClock, typename _Duration>
+  //  time_point<_DestClock, see below>
+  //  clock_cast(const time_point<_SourceClock, _Duration>& __t);
 
   // Identity
   template<typename _Clock>
@@ -325,6 +445,7 @@ namespace chrono {
 	{ return _DestClock::from_sys(__t); }
     };
 
+  // Clock <-> utc_clock
   template<typename _SourceClock>
     struct clock_time_conversion<utc_clock, _SourceClock>
     {
@@ -338,7 +459,7 @@ namespace chrono {
   template<typename _DestClock>
     struct clock_time_conversion<_DestClock, utc_clock>
     {
-      template<class _Duration>
+      template<typename _Duration>
 	auto
 	operator()(const utc_time<_Duration>& __t) const
 	-> decltype(_DestClock::from_utc(__t))
@@ -874,9 +995,7 @@ namespace chrono {
 
     unsigned char _M_wd;
 
-    friend class weekday_indexed;
-
-    constexpr unsigned char
+    constexpr static unsigned char
     __from_days(int __d) noexcept
     {
       return static_cast<unsigned char>(
@@ -889,7 +1008,7 @@ namespace chrono {
 
     explicit constexpr
     weekday(unsigned __wd) noexcept
-    : _M_wd(__wd)
+    : _M_wd(__wd == 7 ? 0 : __wd) // __wd % 7 ?
     { }
 
     constexpr
@@ -897,12 +1016,10 @@ namespace chrono {
     : _M_wd(__from_days(__dp.time_since_epoch().count()))
     { }
 
-
     explicit constexpr
     weekday(const local_days& __dp) noexcept
     : _M_wd(__from_days(__dp.time_since_epoch().count()))
     { }
-
 
     constexpr weekday&
     operator++() noexcept
@@ -937,14 +1054,14 @@ namespace chrono {
     constexpr weekday&
     operator+=(const days& __d) noexcept
     {
-      *this += __d.count();
+      *this += __d;
       return *this;
     }
 
     constexpr weekday&
     operator-=(const days& __d) noexcept
     {
-      *this -= __d.count();
+      *this -= __d;
       return *this;
     }
 
@@ -960,8 +1077,7 @@ namespace chrono {
     operator[](unsigned __index) const noexcept;
 
     constexpr weekday_last
-    operator[](last_spec) const noexcept
-    { return weekday_last{*this}; }
+    operator[](last_spec) const noexcept;
   };
 
   constexpr bool
@@ -987,7 +1103,7 @@ namespace chrono {
   constexpr days
   operator-(const weekday& __x, const weekday& __y) noexcept
   {
-    const auto __dwd = __x._M_wd - __y._M_wd;
+    const auto __dwd = int(unsigned(__x)) - int(unsigned(__y));
     const auto __w = (__dwd >= 0 ? __dwd : __dwd - 6) / 7;
     return days{__dwd - __w * 7};
   }
@@ -1093,6 +1209,10 @@ namespace chrono {
     basic_ostream<_CharT, _Traits>&
     operator<<(basic_ostream<_CharT, _Traits>& __os,
 	       const weekday_last& __wdl);
+
+  inline constexpr weekday_last
+  weekday::operator[](last_spec) const noexcept
+  { return weekday_last{*this}; }
 
   // MONTH_DAY
 
@@ -1408,7 +1528,10 @@ namespace chrono {
 
   constexpr year_month
   operator+(const year_month& __ym, const months& __dm) noexcept
-  { return poop }
+  {
+    auto __ret = __ym;
+    return __ret += __dm;
+  }
 
   constexpr year_month
   operator+(const months& __dm, const year_month& __ym) noexcept
@@ -1466,6 +1589,24 @@ namespace chrono {
     chrono::month _M_m;
     chrono::day _M_d;
 
+    // Magic.
+    constexpr static year_month_day
+    __from_days(const days& __dp) noexcept
+    {
+      const auto __z = __dp.count() + 719468;
+      const auto __era = (__z >= 0 ? __z : __z - 146096) / 146097;
+      const auto __doe = static_cast<unsigned>(__z - __era * 146097);
+      const auto __yoe = (__doe - __doe / 1460 + __doe / 36524 - __doe / 146096)
+			/ 365;
+      const auto __y = static_cast<days::rep>(__yoe) + __era * 400;
+      const auto __doy = __doe - (365 * __yoe + __yoe / 4 - __yoe / 100);
+      const auto __mp = (5 * __doy + 2) / 153;
+      const auto __d = __doy - (153 * __mp + 2) / 5 + 1;
+      const auto __m = __mp < 10 ? __mp + 3 : __mp - 9;
+      return year_month_day{chrono::year(__y + (__m <= 2)),
+			    chrono::month(__m), chrono::day(__d)};
+    }
+
   public:
 
     year_month_day() = default;
@@ -1481,12 +1622,12 @@ namespace chrono {
 
     constexpr
     year_month_day(const sys_days& __dp) noexcept
-    : year_month_day(from_days(__dp.time_since_epoch()))
+    : year_month_day(__from_days(__dp.time_since_epoch()))
     { }
 
     explicit constexpr
     year_month_day(const local_days& __dp) noexcept
-    : year_month_day(from_days(__dp.time_since_epoch()))
+    : year_month_day(__from_days(__dp.time_since_epoch()))
     { }
 
     constexpr year_month_day&
@@ -1512,14 +1653,14 @@ namespace chrono {
     constexpr year_month_day&
     operator+=(const years& __y) noexcept
     {
-      this->_M_y += __dy;
+      this->_M_y += __y;
       return *this;
     }
 
     constexpr year_month_day&
     operator-=(const years& __y) noexcept
     {
-      this->_M_y -= __dy;
+      this->_M_y -= __y;
       return *this;
     }
 
@@ -1562,15 +1703,15 @@ namespace chrono {
   constexpr bool
   operator<(const year_month_day& __x, const year_month_day& __y) noexcept
   {
-    if (__x.year() < __y.year());
+    if (__x.year() < __y.year())
       return true;
-    else if (__x.year() > __y.year());
+    else if (__x.year() > __y.year())
       return false;
     else
       {
 	if (__x.month() < __y.month())
 	  return true;
-	else if (__x.month() > __y.month());
+	else if (__x.month() > __y.month())
 	  return false;
 	else
 	  return __x.day() < __y.day();
@@ -1650,28 +1791,28 @@ namespace chrono {
     constexpr year_month_day_last&
     operator+=(const months& __m) noexcept
     {
-      this->_M_mdl += __m;
+      *this = *this + __m;
       return *this;
     }
 
     constexpr year_month_day_last&
     operator-=(const months& __m) noexcept
     {
-      this->_M_mdl -= __m;
+      *this = *this - __m;
       return *this;
     }
 
     constexpr year_month_day_last&
     operator+=(const years& __y)  noexcept
     {
-      this->_M_y += __y;
+      *this = *this + __y;
       return *this;
     }
 
     constexpr year_month_day_last&
     operator-=(const years& __y)  noexcept
     {
-      this->_M_y -= __y;
+      *this = *this - __y;
       return *this;
     }
 
@@ -1687,9 +1828,15 @@ namespace chrono {
     month_day_last() const noexcept
     { return this->_M_mdl; }
 
+    // Return A day representing the last day of this year, month pair.
     constexpr chrono::day
     day() const noexcept
-    { return this->_M_mdl.day(); }
+    {
+      return this->month() != chrono::month{2}
+	  || !this->_M_y.is_leap()
+	   ? chrono::day{__detail::__last_day[unsigned(this->_M_mdl.month()) - 1]}
+	   : chrono::day{29};
+    }
 
     constexpr
     operator sys_days() const noexcept
@@ -1761,6 +1908,11 @@ namespace chrono {
   { return __ymdl + __dm; }
 
   constexpr year_month_day_last
+  operator-(const year_month_day_last& __ymdl,
+	    const months& __dm) noexcept
+  { return __ymdl + -__dm; }
+
+  constexpr year_month_day_last
   operator+(const year_month_day_last& __ymdl,
 	    const years& __dy) noexcept
   { return {__ymdl.year() + __dy, __ymdl.month_day_last()}; }
@@ -1769,11 +1921,6 @@ namespace chrono {
   operator+(const years& __dy,
 	    const year_month_day_last& __ymdl) noexcept
   { return __ymdl + __dy; }
-
-  constexpr year_month_day_last
-  operator-(const year_month_day_last& __ymdl,
-	    const months& __dm) noexcept
-  { return __ymdl + -__dm; }
 
   constexpr year_month_day_last
   operator-(const year_month_day_last& __ymdl,
@@ -1917,28 +2064,28 @@ namespace chrono {
     constexpr year_month_weekday_last&
     operator+=(const months& __m) noexcept
     {
-      this->_M_m += __m;
+      *this = *this + __m;
       return *this;
     }
 
     constexpr year_month_weekday_last&
     operator-=(const months& __m) noexcept
     {
-      this->_M_m -= __m;
+      *this = *this - __m;
       return *this;
     }
 
     constexpr year_month_weekday_last&
     operator+=(const years& __y)  noexcept
     {
-      this->_M_y += __y;
+      *this = *this + __y;
       return *this;
     }
 
     constexpr year_month_weekday_last&
     operator-=(const years& __y)  noexcept
     {
-      this->_M_y -= __y;
+      *this = *this - __y;
       return *this;
     }
 
@@ -1960,7 +2107,7 @@ namespace chrono {
 
     constexpr
     operator sys_days() const noexcept
-    { return ; }
+    { return sys_days{sys_days{*this}.time_since_epoch()}; }
 
     explicit constexpr
     operator local_days() const noexcept
@@ -2072,11 +2219,11 @@ namespace chrono {
 
   constexpr month_weekday
   operator/(int __m, const weekday_indexed& __wdi) noexcept
-  { return month(unsigned(__m) / __wdi; }
+  { return month(unsigned(__m)) / __wdi; }
 
   constexpr month_weekday
   operator/(const weekday_indexed& __wdi, const month& __m) noexcept
-  { return __m / __wdi;
+  { return __m / __wdi; }
 
   constexpr month_weekday
   operator/(const weekday_indexed& __wdi, int __m) noexcept
@@ -2088,7 +2235,7 @@ namespace chrono {
 
   constexpr month_weekday_last
   operator/(int __m, const weekday_last& __wdl) noexcept
-  { return month(unsigned(__m) / __wdl; }
+  { return month(unsigned(__m)) / __wdl; }
 
   constexpr month_weekday_last
   operator/(const weekday_last& __wdl, const month& __m) noexcept
@@ -2096,22 +2243,23 @@ namespace chrono {
 
   constexpr month_weekday_last
   operator/(const weekday_last& __wdl, int __m) noexcept
-  { return month(unsigned(__m) / __wdl; }
+  { return chrono::month(unsigned(__m)) / __wdl; }
 
   constexpr year_month_day
-  operator/(const year_month& __ym, const day& __d) noexcept;
-
-  constexpr year_month_day
-  operator/(const year_month& __ym, int __d) noexcept
+  operator/(const year_month& __ym, const day& __d) noexcept
   { return {__ym.year(), __ym.month(), __d}; }
 
   constexpr year_month_day
+  operator/(const year_month& __ym, int __d) noexcept
+  { return __ym / chrono::day{unsigned(__d)}; }
+
+  constexpr year_month_day
   operator/(const year& __y, const month_day& __md) noexcept
-  { return __ym / __d; }
+  { return __y / __md; }
 
   constexpr year_month_day
   operator/(int __y, const month_day& __md) noexcept
-  { return __y / __md.month() / __md.day(); }
+  { return chrono::year{__y} / __md; }
 
   constexpr year_month_day
   operator/(const month_day& __md, const year& __y) noexcept
@@ -2163,7 +2311,7 @@ namespace chrono {
 
   constexpr year_month_weekday_last
   operator/(const year_month& __ym, const weekday_last& __wdl) noexcept
-  { return {__ym.year(), __ym.month(), __wdl} }
+  { return {__ym.year(), __ym.month(), __wdl}; }
 
   constexpr year_month_weekday_last
   operator/(const year& __y, const month_weekday_last& __mwdl) noexcept
@@ -2302,24 +2450,57 @@ namespace chrono {
     operator<<(basic_ostream<_CharT, _Traits>& __os,
 	       const time_of_day<duration<_Rep, _Period>>& __t);
 
-  // EXCEPTION CLASSES
-
-  class nonexistent_local_time;
-  class ambiguous_local_time;
-
   // INFORMATION CLASSES
 
-  struct sys_info;
+  struct sys_info
+  {
+    sys_seconds begin;
+    sys_seconds end;
+    seconds offset;
+    minutes save;
+    string abbrev;
+  };
 
   template<typename _CharT, typename _Traits>
     basic_ostream<_CharT, _Traits>&
     operator<<(basic_ostream<_CharT, _Traits>& __os, const sys_info& __si);
 
-  struct local_info;
+  struct local_info
+  {
+    enum
+    {
+      unique,
+      nonexistent,
+      ambiguous
+    } result;
+
+    sys_info first;
+    sys_info second;
+  };
 
   template<typename _CharT, typename _Traits>
     basic_ostream<_CharT, _Traits>&
     operator<<(basic_ostream<_CharT, _Traits>& __os, const local_info& __li);
+
+  // EXCEPTION CLASSES
+
+  class nonexistent_local_time
+  : public runtime_error
+  {
+  public:
+    template<typename _Duration>
+      nonexistent_local_time(const local_time<_Duration>& __tp,
+                             const local_info& __i);
+  };
+
+  class ambiguous_local_time
+  : public runtime_error
+  {
+  public:
+    template<typename Duration>
+      ambiguous_local_time(const local_time<Duration>& __tp,
+                           const local_info& __i);
+  };
 
   // TIME_ZONE
 
@@ -2341,25 +2522,25 @@ namespace chrono {
     string_view
     name() const noexcept;
 
-    template<class Duration>
+    template<typename _Duration>
       sys_info
-      get_info(const sys_time<Duration>& __st) const;
+      get_info(const sys_time<_Duration>& __st) const;
 
-    template<class Duration>
+    template<typename _Duration>
       local_info
-      get_info(const local_time<Duration>& __tp) const;
+      get_info(const local_time<_Duration>& __tp) const;
 
-    template<class Duration>
-      sys_time<common_type_t<Duration, seconds>>
-      to_sys(const local_time<Duration>& __tp) const;
+    template<typename _Duration>
+      sys_time<common_type_t<_Duration, seconds>>
+      to_sys(const local_time<_Duration>& __tp) const;
 
-    template<class Duration>
-      sys_time<common_type_t<Duration, seconds>>
-      to_sys(const local_time<Duration>& __tp, choose __z) const;
+    template<typename _Duration>
+      sys_time<common_type_t<_Duration, seconds>>
+      to_sys(const local_time<_Duration>& __tp, choose __z) const;
 
-    template<class Duration>
-      local_time<common_type_t<Duration, seconds>>
-      to_local(const sys_time<Duration>& __tp) const;
+    template<typename _Duration>
+      local_time<common_type_t<_Duration, seconds>>
+      to_local(const sys_time<_Duration>& __tp) const;
   };
 
   bool
@@ -2382,18 +2563,40 @@ namespace chrono {
 
   // ZONED_TIME
 
+  const time_zone*
+  locate_zone(string_view tz_name);
+
+  const time_zone*
+  current_zone();
+
+  template<typename _Tp>
+  struct zoned_traits
+  { };
+
+  template<>
+  struct zoned_traits<const time_zone*>
+  {
+    static const time_zone*
+    default_zone()
+    { return chrono::locate_zone("Etc/UTC"); }
+
+    static const time_zone*
+    locate_zone(std::string_view name)
+    { return chrono::locate_zone(name); }
+  };
+
   template<typename _Duration, typename _TimeZonePtr = const time_zone*>
     class zoned_time
     {
     public:
-      using duration = common_type_t<Duration, seconds>;
+      using duration = common_type_t<_Duration, seconds>;
 
     private:
 
-      TimeZonePtr _M_zone;
+      _TimeZonePtr _M_zone;
       sys_time<duration> _M_tp;
 
-      using traits = zoned_traits<TimeZonePtr>;
+      using traits = zoned_traits<_TimeZonePtr>;
 
     public:
 
@@ -2404,51 +2607,55 @@ namespace chrono {
       zoned_time&
       operator=(const zoned_time&) = default;
 
-      zoned_time(const sys_time<Duration>& __st);
+      zoned_time(const sys_time<_Duration>& __st);
 
-      explicit zoned_time(TimeZonePtr __z);
+      explicit zoned_time(_TimeZonePtr __z);
 
       explicit zoned_time(string_view __name);
 
-      template<class Duration2>
-        zoned_time(const zoned_time<Duration2>& __zt) noexcept;
+      template<typename _Duration2>
+        zoned_time(const zoned_time<_Duration2>& __zt) noexcept;
 
-      zoned_time(TimeZonePtr __z, const sys_time<Duration>& __st);
+      zoned_time(_TimeZonePtr __z, const sys_time<_Duration>& __st);
 
-      zoned_time(string_view __name, const sys_time<Duration>& __st);
+      zoned_time(string_view __name, const sys_time<_Duration>& __st);
 
-      zoned_time(TimeZonePtr __z, const local_time<Duration>& __tp);
+      zoned_time(_TimeZonePtr __z, const local_time<_Duration>& __tp);
 
-      zoned_time(string_view __name, const local_time<Duration>& __tp);
+      zoned_time(string_view __name, const local_time<_Duration>& __tp);
 
-      zoned_time(TimeZonePtr __z, const local_time<Duration>& __tp, choose __c);
+      zoned_time(_TimeZonePtr __z, const local_time<_Duration>& __tp,
+                 choose __c);
 
-      zoned_time(string_view __name, const local_time<Duration>& __tp, choose __c);
+      zoned_time(string_view __name, const local_time<_Duration>& __tp,
+                 choose __c);
 
-      template <class Duration2, class TimeZonePtr2>
-        zoned_time(TimeZonePtr __z,
-                   const zoned_time<Duration2, TimeZonePtr2>& __zt);
+      template <typename _Duration2, typename _TimeZonePtr2>
+        zoned_time(_TimeZonePtr __z,
+                   const zoned_time<_Duration2, _TimeZonePtr2>& __zt);
 
-      template <class Duration2, class TimeZonePtr2>
-        zoned_time(TimeZonePtr __z,
-                   const zoned_time<Duration2, TimeZonePtr2>& __zt, __choose);
+      template <typename _Duration2, typename _TimeZonePtr2>
+        zoned_time(_TimeZonePtr __z,
+                   const zoned_time<_Duration2, _TimeZonePtr2>& __zt,
+                   choose __c);
 
-      zoned_time(string_view name, const zoned_time<Duration>& __zt);
+      zoned_time(string_view name, const zoned_time<_Duration>& __zt);
 
-      zoned_time(string_view name, const zoned_time<Duration>& __zt, __choose);
+      zoned_time(string_view name, const zoned_time<_Duration>& __zt,
+                 choose __c);
 
       zoned_time&
-      operator=(const sys_time<Duration>& __st);
+      operator=(const sys_time<_Duration>& __st);
 
       zoned_time&
-      operator=(const local_time<Duration>& __ut);
+      operator=(const local_time<_Duration>& __ut);
 
       operator sys_time<duration>() const;
 
       explicit
       operator local_time<duration>() const;
 
-      TimeZonePtr
+      _TimeZonePtr
       get_time_zone() const;
 
       local_time<duration>
@@ -2489,17 +2696,56 @@ namespace chrono {
 
   // TIME ZONE DATABASE
 
-  struct tzdb;
-  class tzdb_list;
-  const tzdb& get_tzdb();
-  tzdb_list& get_tzdb_list();
-  const time_zone* locate_zone(string_view tz_name);
-  const time_zone* current_zone();
+  struct tzdb
+  {
+    string version;
+    vector<time_zone> zones;
+    vector<link> links;
+    vector<leap> leaps;
+
+    const time_zone*
+    locate_zone(string_view tz_name) const;
+
+    const time_zone*
+    current_zone() const;
+
+    tzdb* _M_next;
+  };
+
+  class tzdb_list
+  {
+    atomic<tzdb*> _M_head{nullptr};
+
+  public:
+    tzdb_list(const tzdb_list&) = delete;
+    tzdb_list& operator=(const tzdb_list&) = delete;
+
+    class const_iterator;
+
+    const tzdb& front() const noexcept;
+
+    const_iterator erase_after(const_iterator __p);
+
+    const_iterator begin() const noexcept;
+    const_iterator end()   const noexcept;
+
+    const_iterator cbegin() const noexcept;
+    const_iterator cend()   const noexcept;
+  };
+
+  const tzdb&
+  get_tzdb();
+
+  tzdb_list&
+  get_tzdb_list();
 
   // REMOTE TIME ZONE DATABASE
 
-  const tzdb& __reload_tzdb();
-  string remote_version();
+  const tzdb&
+  __reload_tzdb();
+
+  string
+  remote_version();
 
   // FORMAT
 
@@ -2575,7 +2821,8 @@ namespace chrono {
     // Unspecified constructors
 
     constexpr sys_seconds
-    date() const noexcept;
+    date() const noexcept
+    { return this->_M_date; }
   };
 
   bool
@@ -2588,7 +2835,7 @@ namespace chrono {
 
   bool
   operator<(const leap& __x, const leap& __y)
-  { return unsigned{__x} < unsigned{__y}; }
+  { return __x < __y; }
 
   bool
   operator>(const leap& __x, const leap& __y)
@@ -2712,28 +2959,26 @@ namespace chrono {
   operator>=(const link& __x, const link& __y)
   { return !(__x < __y); }
 
-  inline constexpr last_spec last{};
+  constexpr chrono::weekday Sunday{0};
+  constexpr chrono::weekday Monday{1};
+  constexpr chrono::weekday Tuesday{2};
+  constexpr chrono::weekday Wednesday{3};
+  constexpr chrono::weekday Thursday{4};
+  constexpr chrono::weekday Friday{5};
+  constexpr chrono::weekday Saturday{6};
 
-  inline constexpr chrono::weekday Sunday{0};
-  inline constexpr chrono::weekday Monday{1};
-  inline constexpr chrono::weekday Tuesday{2};
-  inline constexpr chrono::weekday Wednesday{3};
-  inline constexpr chrono::weekday Thursday{4};
-  inline constexpr chrono::weekday Friday{5};
-  inline constexpr chrono::weekday Saturday{6};
-
-  inline constexpr chrono::month January{1};
-  inline constexpr chrono::month February{2};
-  inline constexpr chrono::month March{3};
-  inline constexpr chrono::month April{4};
-  inline constexpr chrono::month May{5};
-  inline constexpr chrono::month June{6};
-  inline constexpr chrono::month July{7};
-  inline constexpr chrono::month August{8};
-  inline constexpr chrono::month September{9};
-  inline constexpr chrono::month October{10};
-  inline constexpr chrono::month November{11};
-  inline constexpr chrono::month December{12};
+  constexpr chrono::month January{1};
+  constexpr chrono::month February{2};
+  constexpr chrono::month March{3};
+  constexpr chrono::month April{4};
+  constexpr chrono::month May{5};
+  constexpr chrono::month June{6};
+  constexpr chrono::month July{7};
+  constexpr chrono::month August{8};
+  constexpr chrono::month September{9};
+  constexpr chrono::month October{10};
+  constexpr chrono::month November{11};
+  constexpr chrono::month December{12};
 
 } // namespace chrono
 
